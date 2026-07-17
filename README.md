@@ -156,7 +156,7 @@ Output is rendered as formatted tables/trees in the console; there is currently 
 
 ## Bulk import
 
-`splitwise import <path>` reads one or more `.xlsx` files (a single file, a directory of `.xlsx` files, or a glob pattern) and creates one Splitwise expense per row. Each row needs a `Description`, `Cost`, `Date`, `Category`, and `Group`; every expense is split **equally** across the named group's current members with you as the payer, and category/group names are validated live against your real Splitwise account.
+`splitwise import <path>` reads one or more `.xlsx` files (a single file, a directory of `.xlsx` files, or a glob pattern) and creates one Splitwise expense per row. Each row needs a `Description`, `Cost`, `Date`, `Category`, and `Group`, plus an optional `Details` column for notes; every expense is split **equally** across the named group's current members with you as the payer, and category/group names are validated live against your real Splitwise account.
 
 See **[docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md)** for the full column reference, validation rules, and example data.
 

@@ -70,6 +70,50 @@ public class ExcelExpenseReaderTests : IDisposable
     }
 
     [Fact]
+    public void Read_LeavesDetailsNull_WhenColumnIsAbsent()
+    {
+        var rows = ExcelExpenseReader.Read(_filePath);
+
+        Assert.Null(rows[0].Details);
+    }
+
+    [Fact]
+    public void Read_ParsesDetailsColumn_WhenPresent()
+    {
+        var pathWithDetails = Path.Combine(Path.GetTempPath(), $"SplitwiseCLI.Tests-{Guid.NewGuid():N}.xlsx");
+        using (var workbook = new XLWorkbook())
+        {
+            var sheet = workbook.Worksheets.Add("Expenses");
+            sheet.Cell(1, 1).Value = "Description";
+            sheet.Cell(1, 2).Value = "Cost";
+            sheet.Cell(1, 3).Value = "Date";
+            sheet.Cell(1, 4).Value = "Category";
+            sheet.Cell(1, 5).Value = "Group";
+            sheet.Cell(1, 6).Value = "Details";
+
+            sheet.Cell(2, 1).Value = "Groceries";
+            sheet.Cell(2, 2).Value = 42.5;
+            sheet.Cell(2, 3).Value = new DateTime(2026, 1, 15);
+            sheet.Cell(2, 4).Value = "Groceries";
+            sheet.Cell(2, 5).Value = "Roommates";
+            sheet.Cell(2, 6).Value = "Weekly shop";
+
+            workbook.SaveAs(pathWithDetails);
+        }
+
+        try
+        {
+            var rows = ExcelExpenseReader.Read(pathWithDetails);
+
+            Assert.Equal("Weekly shop", rows[0].Details);
+        }
+        finally
+        {
+            File.Delete(pathWithDetails);
+        }
+    }
+
+    [Fact]
     public void Read_ThrowsClearError_WhenExpectedColumnIsMissing()
     {
         var pathWithoutHeaders = Path.Combine(Path.GetTempPath(), $"SplitwiseCLI.Tests-{Guid.NewGuid():N}.xlsx");
