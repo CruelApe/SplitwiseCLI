@@ -21,6 +21,8 @@ services.AddSingleton<ExpenseCommand>();
 services.AddSingleton<CommentsCommand>();
 services.AddSingleton<NotificationsCommand>();
 services.AddSingleton<CurrenciesCommand>();
+services.AddSingleton<VersionCommand>();
+services.AddSingleton<AboutCommand>();
 
 var app = new CommandApp(new TypeRegistrar(services));
 app.Configure(config =>
@@ -93,6 +95,12 @@ app.Configure(config =>
 
     config.AddCommand<CurrenciesCommand>("currencies")
         .WithDescription("List currency codes supported by Splitwise.");
+
+    config.AddCommand<VersionCommand>("version")
+        .WithDescription("Show the SplitwiseCLI version.");
+
+    config.AddCommand<AboutCommand>("about")
+        .WithDescription("Show information about SplitwiseCLI, including author and repository.");
 });
 
 if (args.Length == 0)
