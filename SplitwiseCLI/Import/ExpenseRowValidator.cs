@@ -5,6 +5,7 @@ namespace SplitwiseCLI.Import;
 public sealed class ValidatedExpenseRow
 {
     public required string Description { get; init; }
+    public string? Details { get; init; }
     public required decimal Cost { get; init; }
     public required DateTime Date { get; init; }
     public required string Category { get; init; }
@@ -53,6 +54,7 @@ public static class ExpenseRowValidator
         return (new ValidatedExpenseRow
         {
             Description = row.Description.Trim(),
+            Details = string.IsNullOrWhiteSpace(row.Details) ? null : row.Details.Trim(),
             Cost = cost,
             Date = date,
             Category = row.Category.Trim(),

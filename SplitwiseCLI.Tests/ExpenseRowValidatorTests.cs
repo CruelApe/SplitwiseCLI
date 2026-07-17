@@ -79,6 +79,27 @@ public class ExpenseRowValidatorTests
     }
 
     [Fact]
+    public void Validate_AllowsMissingDetails()
+    {
+        var (validated, error) = ExpenseRowValidator.Validate(ValidRow());
+
+        Assert.Null(error);
+        Assert.Null(validated!.Details);
+    }
+
+    [Fact]
+    public void Validate_PassesThroughDetails_WhenProvided()
+    {
+        var row = ValidRow();
+        row = new ExpenseRow { SourceFile = row.SourceFile, RowNumber = row.RowNumber, Description = row.Description, RawCost = row.RawCost, RawDate = row.RawDate, Category = row.Category, Group = row.Group, Details = "  Weekly shop  " };
+
+        var (validated, error) = ExpenseRowValidator.Validate(row);
+
+        Assert.Null(error);
+        Assert.Equal("Weekly shop", validated!.Details);
+    }
+
+    [Fact]
     public void Validate_PropagatesReaderParseError()
     {
         var row = new ExpenseRow { SourceFile = "test.xlsx", RowNumber = 3, ParseError = "boom" };

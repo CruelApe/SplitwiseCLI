@@ -40,7 +40,7 @@ app.Configure(config =>
         .WithDescription("List Splitwise expense categories (parent categories and their subcategories).");
 
     config.AddCommand<ImportCommand>("import")
-        .WithDescription("Bulk-import expenses from Excel file(s). Columns: Description, Cost, Date, Category, Group.")
+        .WithDescription("Bulk-import expenses from Excel file(s). Columns: Description, Cost, Date, Category, Group, and optional Details.")
         .WithExample("import", "C:/expenses/january.xlsx")
         .WithExample("import", "C:/expenses/*.xlsx");
 

@@ -18,9 +18,9 @@ splitwise import "C:/expenses/*.xlsx"
 
 If a path/glob matches no files, the command fails with `No files matched pattern '<pattern>'.` When multiple files match, all of them are processed in a single run and their results are combined into one summary.
 
-## Required columns
+## Columns
 
-The first row of each sheet must be a header row containing exactly these five column names. Matching is **case-insensitive** and columns may appear in **any order**; all five are mandatory on every data row.
+The first row of each sheet must be a header row. Matching is **case-insensitive** and columns may appear in **any order**. All columns are mandatory on every data row **except `Details`**, which is optional.
 
 | Column | Required | Format | Example |
 |---|---|---|---|
@@ -29,8 +29,9 @@ The first row of each sheet must be a header row containing exactly these five c
 | `Date` | Yes | Any standard date format (e.g. `2026-01-15`), or a native Excel date-formatted cell | `2026-01-15` |
 | `Category` | Yes | Name of an existing Splitwise **subcategory** (case-insensitive) — see [Categories](#categories-parent-vs-subcategory) below | `Groceries` |
 | `Group` | Yes | Name of an existing Splitwise group you belong to (case-insensitive) | `Roommates` |
+| `Details` | No | Free text — becomes the expense's notes/details field in Splitwise. Leave cells blank, or omit the column entirely, if you don't need it. | `Paid via credit card` |
 
-If the header row is missing one of these columns, the whole file is rejected before any rows are processed:
+If the header row is missing one of the **required** columns, the whole file is rejected before any rows are processed:
 
 ```
 '<file>': missing expected column(s) [<missing>]. Expected header row: Description, Cost, Date, Category, Group.
@@ -67,12 +68,12 @@ Run `splitwise currencies` to see the currency codes Splitwise accepts.
 
 ## Example workbook
 
-Create an `.xlsx` file with a header row and data rows like these:
+Create an `.xlsx` file with a header row and data rows like these (the `Details` column is optional and can be omitted entirely):
 
-| Description | Cost | Date | Category | Group |
-|---|---|---|---|---|
-| Groceries | 42.50 | 2026-01-15 | Groceries | Roommates |
-| Internet bill | 60.00 | 2026-01-01 | Cleaning | Roommates |
+| Description | Cost | Date | Category | Group | Details |
+|---|---|---|---|---|---|
+| Groceries | 42.50 | 2026-01-15 | Groceries | Roommates | Weekly shop |
+| Internet bill | 60.00 | 2026-01-01 | Cleaning | Roommates | |
 
 ```powershell
 splitwise import C:/expenses/january.xlsx

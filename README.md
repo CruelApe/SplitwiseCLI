@@ -17,38 +17,58 @@ A Windows command-line client for [Splitwise](https://www.splitwise.com/) — vi
 
 ## Installation
 
-Clone the repository:
+**Prerequisite:** the [.NET 10 SDK](https://dotnet.microsoft.com/download) — needed once, to build/install the tool (there's no pre-built installer/download yet).
 
-```powershell
+Everything below works identically whether you use **PowerShell** or **Command Prompt (cmd.exe)** — every step just invokes `git`/`dotnet`, not a shell built-in, so there's nothing shell-specific to translate.
+
+### 1. Get the source
+
+Either clone it with git:
+
+```
 git clone https://github.com/CruelApe/SplitwiseCLI.git
 cd SplitwiseCLI
 ```
 
-### Option A — install as a global tool (recommended)
+or, if you don't have git installed, download it instead: on the [repository page](https://github.com/CruelApe/SplitwiseCLI), click **Code → Download ZIP**, extract it, then open PowerShell or Command Prompt in the extracted `SplitwiseCLI` folder.
 
-The project is already configured as a .NET global tool (command name `splitwise`). Pack and install it locally:
+> **cmd.exe tip:** if that folder is on a different drive than your prompt (e.g. it's on `D:` but cmd opened on `C:`), plain `cd` won't switch drives — use `cd /d D:\path\to\SplitwiseCLI` instead. PowerShell's `cd` switches drives automatically, so this only matters in cmd.
 
-```powershell
+### 2. Install
+
+**Option A — install as a global tool (recommended for regular use)**
+
+The project is already configured as a .NET global tool (command name `splitwise`). From the `SplitwiseCLI` folder, run:
+
+```
 dotnet pack SplitwiseCLI -o nupkg
-dotnet tool install --global --add-source ./nupkg SplitwiseCLI
+dotnet tool install --global --add-source nupkg SplitwiseCLI
 ```
 
-You can now run `splitwise` from any terminal. After pulling changes, reinstall with:
+Confirm it worked:
 
-```powershell
+```
+splitwise about
+```
+
+> If Windows says `splitwise` is not recognized right after installing, close and reopen your terminal. The .NET global tools folder (`%USERPROFILE%\.dotnet\tools`) is added to `PATH` by the SDK installer, but a terminal window that was already open won't pick up the change until restarted.
+
+To pick up a newer version later (after pulling or re-downloading), reinstall with `update` instead of `install`:
+
+```
 dotnet pack SplitwiseCLI -o nupkg
-dotnet tool update --global --add-source ./nupkg SplitwiseCLI
+dotnet tool update --global --add-source nupkg SplitwiseCLI
 ```
 
 To remove it: `dotnet tool uninstall --global SplitwiseCLI`.
 
-### Option B — run from source
+**Option B — run from source (for development)**
 
-```powershell
+```
 dotnet run --project SplitwiseCLI -- <command> [arguments]
 ```
 
-### Option C — download a release binary
+**Option C — download a release binary**
 
 Download `SplitwiseCLI-<version>-win-x64.zip` from the [Releases](https://github.com/CruelApe/SplitwiseCLI/releases) page, extract it, and run `splitwise.exe` directly — no .NET SDK required. Optionally add the extracted folder to your `PATH` so `splitwise` is available from any terminal.
 
@@ -113,6 +133,8 @@ The interactive shell supports quoted arguments, e.g. `import "C:/My Expenses/*.
 | `config set-key` | — | Prompt for and save your Splitwise API key |
 | `config show` | — | Show whether an API key is configured and where it's stored |
 | `config clear` | — | Remove the saved API key |
+| `version` | — | Show the SplitwiseCLI version |
+| `about` | — | Show information about SplitwiseCLI, including author and repository |
 
 ### Examples
 
@@ -134,7 +156,7 @@ Output is rendered as formatted tables/trees in the console; there is currently 
 
 ## Bulk import
 
-`splitwise import <path>` reads one or more `.xlsx` files (a single file, a directory of `.xlsx` files, or a glob pattern) and creates one Splitwise expense per row. Each row needs a `Description`, `Cost`, `Date`, `Category`, and `Group`; every expense is split **equally** across the named group's current members with you as the payer, and category/group names are validated live against your real Splitwise account.
+`splitwise import <path>` reads one or more `.xlsx` files (a single file, a directory of `.xlsx` files, or a glob pattern) and creates one Splitwise expense per row. Each row needs a `Description`, `Cost`, `Date`, `Category`, and `Group`, plus an optional `Details` column for notes; every expense is split **equally** across the named group's current members with you as the payer, and category/group names are validated live against your real Splitwise account.
 
 See **[docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md)** for the full column reference, validation rules, and example data.
 
