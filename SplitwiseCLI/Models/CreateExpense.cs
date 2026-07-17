@@ -11,6 +11,9 @@ public sealed class CreateExpenseRequest
     [JsonPropertyName("description")]
     public required string Description { get; init; }
 
+    [JsonPropertyName("details")]
+    public string? Details { get; init; }
+
     [JsonPropertyName("date")]
     public required string Date { get; init; }
 

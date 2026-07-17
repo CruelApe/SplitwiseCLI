@@ -6,9 +6,10 @@ namespace SplitwiseCLI.Tests;
 
 public class ExpenseMapperTests
 {
-    private static ValidatedExpenseRow ValidRow(string category = "Groceries", string group = "Roommates") => new()
+    private static ValidatedExpenseRow ValidRow(string category = "Groceries", string group = "Roommates", string? details = null) => new()
     {
         Description = "Groceries",
+        Details = details,
         Cost = 42.5m,
         Date = new DateTime(2026, 1, 15),
         Category = category,
@@ -35,6 +36,24 @@ public class ExpenseMapperTests
         Assert.Equal(55, request.GroupId);
         Assert.Equal("USD", request.CurrencyCode);
         Assert.True(request.SplitEqually);
+    }
+
+    [Fact]
+    public void Map_PassesThroughDetails()
+    {
+        var (request, error) = ExpenseMapper.Map(ValidRow(details: "Weekly shop"), CategoryLookup(), GroupLookup(), "USD");
+
+        Assert.Null(error);
+        Assert.Equal("Weekly shop", request!.Details);
+    }
+
+    [Fact]
+    public void Map_LeavesDetailsNull_WhenNotProvided()
+    {
+        var (request, error) = ExpenseMapper.Map(ValidRow(), CategoryLookup(), GroupLookup(), "USD");
+
+        Assert.Null(error);
+        Assert.Null(request!.Details);
     }
 
     [Fact]

@@ -53,6 +53,7 @@ public static class ExcelExpenseReader
                 SourceFile = filePath,
                 RowNumber = row.RowNumber(),
                 Description = GetCellText(row, columnIndex, "Description"),
+                Details = GetCellText(row, columnIndex, "Details"),
                 RawCost = GetCellText(row, columnIndex, "Cost"),
                 RawDate = GetCellText(row, columnIndex, "Date"),
                 Category = GetCellText(row, columnIndex, "Category"),
@@ -72,7 +73,13 @@ public static class ExcelExpenseReader
 
     private static string? GetCellText(IXLRow row, Dictionary<string, int> columnIndex, string columnName)
     {
-        var cell = row.Cell(columnIndex[columnName]);
+        // Optional columns (e.g. "Details") may not exist in the sheet at all.
+        if (!columnIndex.TryGetValue(columnName, out var columnNumber))
+        {
+            return null;
+        }
+
+        var cell = row.Cell(columnNumber);
         if (cell.IsEmpty())
         {
             return null;
