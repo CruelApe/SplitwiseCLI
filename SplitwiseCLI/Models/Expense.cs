@@ -22,6 +22,9 @@ public sealed class Expense
     [JsonPropertyName("description")]
     public string? Description { get; init; }
 
+    [JsonPropertyName("details")]
+    public string? Details { get; init; }
+
     [JsonPropertyName("cost")]
     public string? Cost { get; init; }
 

@@ -13,6 +13,7 @@ public static class ExpenseRenderer
         table.AddColumn("Description");
         table.AddColumn("Cost");
         table.AddColumn("Group");
+        table.AddColumn("Details");
 
         foreach (var expense in expenses.OrderByDescending(e => e.Date))
         {
@@ -21,7 +22,8 @@ public static class ExpenseRenderer
                 expense.Date?.ToString("yyyy-MM-dd") ?? "-",
                 (expense.Description ?? "-").EscapeMarkup(),
                 $"{expense.Cost} {expense.CurrencyCode}".Trim().EscapeMarkup(),
-                expense.GroupId is null or 0 ? "-" : expense.GroupId.ToString()!);
+                expense.GroupId is null or 0 ? "-" : expense.GroupId.ToString()!,
+                (expense.Details ?? "-").EscapeMarkup());
         }
 
         AnsiConsole.Write(table);
@@ -35,6 +37,7 @@ public static class ExpenseRenderer
 
         summary.AddRow("Id", expense.Id.ToString());
         summary.AddRow("Description", (expense.Description ?? "-").EscapeMarkup());
+        summary.AddRow("Details", (expense.Details ?? "-").EscapeMarkup());
         summary.AddRow("Cost", $"{expense.Cost} {expense.CurrencyCode}".Trim().EscapeMarkup());
         summary.AddRow("Date", expense.Date?.ToString("yyyy-MM-dd") ?? "-");
         summary.AddRow("Category", expense.Category is null ? "-" : $"{expense.Category.Name} (id: {expense.Category.Id})".EscapeMarkup());

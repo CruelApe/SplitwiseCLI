@@ -5,6 +5,7 @@ public sealed class ExpenseRow
     public required string SourceFile { get; init; }
     public required int RowNumber { get; init; }
     public string? Description { get; init; }
+    public string? Details { get; init; }
     public string? RawCost { get; init; }
     public string? RawDate { get; init; }
     public string? Category { get; init; }
