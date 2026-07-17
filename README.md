@@ -68,7 +68,7 @@ To remove it: `dotnet tool uninstall --global SplitwiseCLI`.
 dotnet run --project SplitwiseCLI -- <command> [arguments]
 ```
 
-### Option C — download a release binary
+**Option C — download a release binary**
 
 Download `SplitwiseCLI-<version>-win-x64.zip` from the [Releases](https://github.com/CruelApe/SplitwiseCLI/releases) page, extract it, and run `splitwise.exe` directly — no .NET SDK required. Optionally add the extracted folder to your `PATH` so `splitwise` is available from any terminal.
 
