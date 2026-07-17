@@ -30,6 +30,7 @@ public static class ExpenseMapper
         {
             Cost = row.Cost.ToString("F2", CultureInfo.InvariantCulture),
             Description = row.Description,
+            Details = row.Details,
             Date = row.Date.ToString("O", CultureInfo.InvariantCulture),
             CurrencyCode = defaultCurrency,
             CategoryId = categoryId,
