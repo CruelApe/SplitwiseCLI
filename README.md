@@ -8,6 +8,7 @@ A Windows command-line client for [Splitwise](https://www.splitwise.com/) — vi
 - Bulk-import expenses from one or more Excel (`.xlsx`) files, with a `rollback` command to undo a specific import run
 - Interactive shell mode for running multiple commands in one session
 - API key stored either via environment variable or encrypted locally (Windows DPAPI) — never in plain text in the repo
+- Self-update (`splitwise update`) checks GitHub Releases and, if installed from a release zip, downloads and applies the new version in place
 
 ## Requirements
 
@@ -134,6 +135,7 @@ The interactive shell supports quoted arguments, e.g. `import "C:/My Expenses/*.
 | `config set-key` | — | Prompt for and save your Splitwise API key |
 | `config show` | — | Show whether an API key is configured and where it's stored |
 | `config clear` | — | Remove the saved API key |
+| `update` | `--check`, `-y`/`--yes` | Check GitHub for a newer release and, if applicable, self-update — see [Updating](#updating) below |
 | `version` | — | Show the SplitwiseCLI version |
 | `about` | — | Show information about SplitwiseCLI, including author and repository |
 
@@ -174,6 +176,22 @@ splitwise rollback 202605-202607-a1b2c3 --yes     # skip the confirmation prompt
 ```
 
 See **[docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md#batch-ids-and-rollback)** for how batch ids are formed and matched.
+
+## Updating
+
+```powershell
+splitwise update           # checks GitHub, and offers to install if a newer release exists
+splitwise update --check   # only checks and reports - never downloads or changes anything
+splitwise update --yes     # skip the confirmation prompt when applying
+```
+
+`splitwise update` checks the [GitHub releases page](https://github.com/CruelApe/SplitwiseCLI/releases) for a newer version than the one you're running. What happens next depends on **how you installed it**:
+
+- **Downloaded release zip (Option C):** the only case a real self-update applies. It downloads the new `SplitwiseCLI-<version>-win-x64.zip`, verifies it against the release's `SHA256SUMS.txt` when that file contains a usable hash, then replaces the files in place — no manual re-download/re-extract needed. The swap happens via a short-lived helper process after this one exits (a running exe can't overwrite itself), so nothing changes until the command finishes and the process closes; run `splitwise version` a few seconds later to confirm.
+- **`dotnet tool install` (Option A):** `update` won't touch any files (a tool install's files live in the NuGet tool store, not somewhere this command should manage) — it just tells you to run `dotnet pack` + `dotnet tool update --global` instead.
+- **Running from source (Option B):** likewise, it just tells you to `git pull`.
+
+A checksum mismatch aborts the update with nothing changed. A missing/unusable checksum (rather than a mismatch) only warns and still proceeds, since the file was already fetched over HTTPS directly from GitHub.
 
 ## Development
 
