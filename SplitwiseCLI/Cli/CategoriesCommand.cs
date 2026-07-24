@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Spectre.Console.Cli;
 using SplitwiseCLI.Output;
 using SplitwiseCLI.Services;
@@ -11,7 +12,7 @@ public sealed class CategoriesCommand(SplitwiseClientFactory clientFactory) : As
         var (client, _) = clientFactory.Create();
         var categoryLookupService = new CategoryLookupService(client);
 
-        var lookup = await categoryLookupService.LoadAsync(cancellationToken);
+        var lookup = await AnsiConsole.Status().StartAsync("Loading categories...", _ => categoryLookupService.LoadAsync(cancellationToken));
         CategoryTreeRenderer.Render(lookup.Categories);
 
         return 0;

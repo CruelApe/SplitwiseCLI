@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Spectre.Console.Cli;
 using SplitwiseCLI.Output;
 
@@ -8,7 +9,7 @@ public sealed class GroupCommand(SplitwiseClientFactory clientFactory) : AsyncCo
     protected override async Task<int> ExecuteAsync(CommandContext context, IdCommandSettings settings, CancellationToken cancellationToken)
     {
         var (client, _) = clientFactory.Create();
-        var group = await client.GetGroupAsync(settings.Id, cancellationToken);
+        var group = await AnsiConsole.Status().StartAsync("Loading group...", _ => client.GetGroupAsync(settings.Id, cancellationToken));
         GroupRenderer.RenderDetail(group);
         return 0;
     }

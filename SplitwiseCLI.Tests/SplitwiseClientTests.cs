@@ -91,6 +91,45 @@ public class SplitwiseClientTests
     }
 
     [Fact]
+    public async Task DeleteExpenseAsync_Succeeds_OnHttp200WithSuccessTrue()
+    {
+        var mockHttp = new MockHttpMessageHandler();
+        mockHttp.Expect(HttpMethod.Post, "https://secure.splitwise.com/api/v3.0/delete_expense/123")
+            .Respond("application/json", """{"success":true}""");
+
+        var client = new SplitwiseClient(mockHttp.ToHttpClient(), Config);
+
+        await client.DeleteExpenseAsync(123);
+
+        mockHttp.VerifyNoOutstandingExpectation();
+    }
+
+    [Fact]
+    public async Task DeleteExpenseAsync_Throws_OnHttp200WithSuccessFalse()
+    {
+        var mockHttp = new MockHttpMessageHandler();
+        mockHttp.When(HttpMethod.Post, "https://secure.splitwise.com/api/v3.0/delete_expense/123")
+            .Respond("application/json", """{"success":false,"errors":{"base":["Cannot delete"]}}""");
+
+        var client = new SplitwiseClient(mockHttp.ToHttpClient(), Config);
+
+        var ex = await Assert.ThrowsAsync<SplitwiseApiException>(() => client.DeleteExpenseAsync(123));
+        Assert.Contains("Cannot delete", ex.Message);
+    }
+
+    [Fact]
+    public async Task DeleteExpenseAsync_Throws_OnNon2xxStatus()
+    {
+        var mockHttp = new MockHttpMessageHandler();
+        mockHttp.When(HttpMethod.Post, "https://secure.splitwise.com/api/v3.0/delete_expense/123")
+            .Respond(System.Net.HttpStatusCode.NotFound, "application/json", """{"error":"Not found"}""");
+
+        var client = new SplitwiseClient(mockHttp.ToHttpClient(), Config);
+
+        await Assert.ThrowsAsync<SplitwiseApiException>(() => client.DeleteExpenseAsync(123));
+    }
+
+    [Fact]
     public async Task GetCategoriesAsync_ThrowsSplitwiseApiException_OnNon2xxStatus()
     {
         var mockHttp = new MockHttpMessageHandler();

@@ -7,33 +7,34 @@ public static class ExpenseMapper
 {
     public static (CreateExpenseRequest? Request, string? Error) Map(
         ValidatedExpenseRow row,
-        IReadOnlyDictionary<string, long> categoryLookup,
-        IReadOnlyDictionary<string, Group> groupLookup,
-        string defaultCurrency)
+        IReadOnlyDictionary<long, string> categoryLookup,
+        IReadOnlyDictionary<long, Group> groupLookup,
+        string defaultCurrency,
+        string? batchId = null)
     {
-        if (!categoryLookup.TryGetValue(row.Category, out var categoryId))
+        if (!categoryLookup.ContainsKey(row.CategoryId))
         {
-            return (null, $"Unknown category '{row.Category}'.");
+            return (null, $"Unknown category id '{row.CategoryId}'.");
         }
 
-        if (!groupLookup.TryGetValue(row.Group, out var group))
+        if (!groupLookup.TryGetValue(row.GroupId, out var group))
         {
-            return (null, $"Unknown group '{row.Group}'.");
+            return (null, $"Unknown group id '{row.GroupId}'.");
         }
 
         if (group.Members.Count == 0)
         {
-            return (null, $"Group '{row.Group}' has no members to split with.");
+            return (null, $"Group '{row.GroupId}' has no members to split with.");
         }
 
         var request = new CreateExpenseRequest
         {
             Cost = row.Cost.ToString("F2", CultureInfo.InvariantCulture),
             Description = row.Description,
-            Details = row.Details,
+            Details = BatchId.ApplyTag(row.Details, batchId),
             Date = row.Date.ToString("O", CultureInfo.InvariantCulture),
             CurrencyCode = defaultCurrency,
-            CategoryId = categoryId,
+            CategoryId = row.CategoryId,
             GroupId = group.Id,
             SplitEqually = true,
         };
