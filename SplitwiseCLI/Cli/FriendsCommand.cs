@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Spectre.Console.Cli;
 using SplitwiseCLI.Output;
 
@@ -8,7 +9,7 @@ public sealed class FriendsCommand(SplitwiseClientFactory clientFactory) : Async
     protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var (client, _) = clientFactory.Create();
-        var friends = await client.GetFriendsAsync(cancellationToken);
+        var friends = await AnsiConsole.Status().StartAsync("Loading friends...", _ => client.GetFriendsAsync(cancellationToken));
         FriendRenderer.RenderList(friends);
         return 0;
     }

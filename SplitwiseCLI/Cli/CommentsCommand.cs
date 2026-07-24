@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Spectre.Console.Cli;
 using SplitwiseCLI.Output;
 
@@ -8,7 +9,7 @@ public sealed class CommentsCommand(SplitwiseClientFactory clientFactory) : Asyn
     protected override async Task<int> ExecuteAsync(CommandContext context, IdCommandSettings settings, CancellationToken cancellationToken)
     {
         var (client, _) = clientFactory.Create();
-        var comments = await client.GetCommentsAsync(settings.Id, cancellationToken);
+        var comments = await AnsiConsole.Status().StartAsync("Loading comments...", _ => client.GetCommentsAsync(settings.Id, cancellationToken));
         CommentRenderer.RenderList(comments);
         return 0;
     }

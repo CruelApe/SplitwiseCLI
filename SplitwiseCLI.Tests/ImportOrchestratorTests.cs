@@ -14,6 +14,9 @@ public class ImportOrchestratorTests : IDisposable
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
+    // Category/group are written as text so tests can exercise both valid numeric
+    // ids (matching FakeSplitwiseClient's category id 101 / group id 55) and
+    // deliberately invalid values (e.g. "NoSuchCategory", "999").
     private string WriteWorkbook(params (string Description, string Cost, string Date, string Category, string Group)[] rows)
     {
         using var workbook = new ClosedXML.Excel.XLWorkbook();
@@ -42,9 +45,9 @@ public class ImportOrchestratorTests : IDisposable
     public async Task RunAsync_ContinuesPastRowFailures_AndReportsBoth()
     {
         var file = WriteWorkbook(
-            ("Good expense", "10.00", "2026-01-01", "Groceries", "Roommates"),
-            ("Unknown category", "5.00", "2026-01-02", "NoSuchCategory", "Roommates"),
-            ("Bad cost", "not-a-number", "2026-01-03", "Groceries", "Roommates"));
+            ("Good expense", "10.00", "2026-01-01", "101", "55"),
+            ("Unknown category", "5.00", "2026-01-02", "999", "55"),
+            ("Bad cost", "not-a-number", "2026-01-03", "101", "55"));
 
         var client = new FakeSplitwiseClient();
         var orchestrator = new ImportOrchestrator(
@@ -59,6 +62,169 @@ public class ImportOrchestratorTests : IDisposable
         Assert.Equal(1, results.Count(r => r.Success));
         Assert.Equal(2, results.Count(r => !r.Success));
         Assert.Single(client.CreatedExpenses);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ReportsProgress_OnceForEachRow_InOrder()
+    {
+        var file = WriteWorkbook(
+            ("Good expense", "10.00", "2026-01-01", "101", "55"),
+            ("Unknown category", "5.00", "2026-01-02", "999", "55"),
+            ("Another good expense", "5.00", "2026-01-03", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var plan = await orchestrator.PrepareAsync([file]);
+        var progressReports = new List<int>();
+
+        var results = await orchestrator.CreateAsync(plan, onRowProcessed: progressReports.Add);
+
+        Assert.Equal(3, results.Count);
+        Assert.Equal([1, 2, 3], progressReports);
+    }
+
+    [Fact]
+    public async Task CreateAsync_PopulatesRowDetails_ForSuccessfulRows()
+    {
+        var file = WriteWorkbook(("Good expense", "10.00", "2026-01-01", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var results = await orchestrator.RunAsync([file]);
+
+        var success = Assert.Single(results);
+        Assert.True(success.Success);
+        Assert.Equal("10.00", success.Cost);
+        Assert.Equal(101, success.CategoryId);
+        Assert.Equal(55, success.GroupId);
+        Assert.StartsWith("SPLITWISE_CLI_", success.Details);
+        Assert.StartsWith("2026-01-01", success.Date);
+    }
+
+    [Fact]
+    public async Task RunAsync_TagsCreatedExpenses_WithBatchIdMatchingRowDates()
+    {
+        var file = WriteWorkbook(
+            ("May expense", "10.00", "2026-05-15", "101", "55"),
+            ("July expense", "20.00", "2026-07-01", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        var orchestrator = new ImportOrchestrator(
+            client,
+            new CategoryLookupService(client),
+            new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var results = await orchestrator.RunAsync([file]);
+
+        Assert.Equal(2, client.CreatedExpenses.Count);
+        Assert.All(client.CreatedExpenses, r => Assert.StartsWith("SPLITWISE_CLI_202605-202607-", r.Details));
+
+        var batchIds = results.Select(r => r.BatchId).Distinct().ToList();
+        Assert.Single(batchIds);
+        Assert.NotNull(batchIds[0]);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_AllValid_IsTrue_WhenEveryRowMapsCleanly()
+    {
+        var file = WriteWorkbook(
+            ("Good expense", "10.00", "2026-01-01", "101", "55"),
+            ("Another good expense", "5.00", "2026-01-02", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var plan = await orchestrator.PrepareAsync([file]);
+
+        Assert.True(plan.AllValid);
+        Assert.Equal(2, plan.Rows.Count);
+        Assert.Empty(client.CreatedExpenses); // PrepareAsync must never call CreateExpenseAsync
+    }
+
+    [Fact]
+    public async Task PrepareAsync_AllValid_IsFalse_WhenAnyRowFailsValidationOrMapping()
+    {
+        var file = WriteWorkbook(
+            ("Good expense", "10.00", "2026-01-01", "101", "55"),
+            ("Unknown category", "5.00", "2026-01-02", "999", "55"));
+
+        var client = new FakeSplitwiseClient();
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var plan = await orchestrator.PrepareAsync([file]);
+
+        Assert.False(plan.AllValid);
+        Assert.Equal(2, plan.Rows.Count);
+        Assert.Empty(client.CreatedExpenses);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_AllValid_IsFalse_WhenFileFailsToRead()
+    {
+        var missingFile = Path.Combine(_root, "does-not-exist.xlsx");
+
+        var client = new FakeSplitwiseClient();
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var plan = await orchestrator.PrepareAsync([missingFile]);
+
+        Assert.False(plan.AllValid);
+        var row = Assert.Single(plan.Rows);
+        Assert.Null(row.Request);
+        Assert.Contains("Failed to read file", row.Error);
+    }
+
+    [Fact]
+    public async Task CreateAsync_CreatesOnlyValidRows_FromPreparedPlan()
+    {
+        var file = WriteWorkbook(
+            ("Good expense", "10.00", "2026-01-01", "101", "55"),
+            ("Unknown category", "5.00", "2026-01-02", "999", "55"));
+
+        var client = new FakeSplitwiseClient();
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var plan = await orchestrator.PrepareAsync([file]);
+        var results = await orchestrator.CreateAsync(plan);
+
+        Assert.Equal(2, results.Count);
+        Assert.Single(client.CreatedExpenses);
+        Assert.Equal(1, results.Count(r => r.Success));
+        Assert.Equal(1, results.Count(r => !r.Success));
+    }
+
+    [Fact]
+    public async Task RunAsync_GivesEachFile_ADifferentBatchId_EvenOverIdenticalDateRanges()
+    {
+        var file1 = WriteWorkbook(("Expense A", "10.00", "2026-05-15", "101", "55"));
+        var file2 = WriteWorkbook(("Expense B", "20.00", "2026-05-16", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        var orchestrator = new ImportOrchestrator(
+            client,
+            new CategoryLookupService(client),
+            new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var results = await orchestrator.RunAsync([file1, file2]);
+
+        var batchIds = results.Select(r => r.BatchId).Distinct().ToList();
+        Assert.Equal(2, batchIds.Count);
     }
 
     private sealed class FakeSplitwiseClient : ISplitwiseClient
@@ -103,5 +269,7 @@ public class ImportOrchestratorTests : IDisposable
             CreatedExpenses.Add(request);
             return Task.FromResult(new CreateExpenseResponse { Success = true, Expenses = [new CreatedExpense { Id = CreatedExpenses.Count }] });
         }
+
+        public Task DeleteExpenseAsync(long id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }
 }

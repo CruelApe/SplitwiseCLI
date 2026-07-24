@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Spectre.Console.Cli;
 using SplitwiseCLI.Output;
 
@@ -8,7 +9,7 @@ public sealed class ExpenseCommand(SplitwiseClientFactory clientFactory) : Async
     protected override async Task<int> ExecuteAsync(CommandContext context, IdCommandSettings settings, CancellationToken cancellationToken)
     {
         var (client, _) = clientFactory.Create();
-        var expense = await client.GetExpenseAsync(settings.Id, cancellationToken);
+        var expense = await AnsiConsole.Status().StartAsync("Loading expense...", _ => client.GetExpenseAsync(settings.Id, cancellationToken));
         ExpenseRenderer.RenderDetail(expense);
         return 0;
     }

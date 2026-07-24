@@ -29,4 +29,6 @@ public interface ISplitwiseClient
     Task<List<Currency>> GetCurrenciesAsync(CancellationToken cancellationToken = default);
 
     Task<CreateExpenseResponse> CreateExpenseAsync(CreateExpenseRequest request, CancellationToken cancellationToken = default);
+
+    Task DeleteExpenseAsync(long id, CancellationToken cancellationToken = default);
 }
