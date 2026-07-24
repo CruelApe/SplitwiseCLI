@@ -24,14 +24,14 @@ public class ExcelExpenseReaderTests : IDisposable
         sheet.Cell(2, 1).Value = "Groceries";
         sheet.Cell(2, 2).Value = 42.5;
         sheet.Cell(2, 3).Value = new DateTime(2026, 1, 15);
-        sheet.Cell(2, 4).Value = "Groceries";
-        sheet.Cell(2, 5).Value = "Roommates";
+        sheet.Cell(2, 4).Value = 101;
+        sheet.Cell(2, 5).Value = 55;
 
         sheet.Cell(3, 1).Value = "Broken row";
         sheet.Cell(3, 2).Value = "not-a-cost";
         sheet.Cell(3, 3).Value = "not-a-date";
-        sheet.Cell(3, 4).Value = "Groceries";
-        sheet.Cell(3, 5).Value = "Roommates";
+        sheet.Cell(3, 4).Value = 101;
+        sheet.Cell(3, 5).Value = 55;
 
         workbook.SaveAs(_filePath);
     }
@@ -53,7 +53,7 @@ public class ExcelExpenseReaderTests : IDisposable
         var goodRow = rows[0];
 
         Assert.Equal("Groceries", goodRow.Description);
-        Assert.Equal("Roommates", goodRow.Group);
+        Assert.Equal("55", goodRow.RawGroup);
         Assert.Null(goodRow.ParseError);
     }
 
@@ -94,8 +94,8 @@ public class ExcelExpenseReaderTests : IDisposable
             sheet.Cell(2, 1).Value = "Groceries";
             sheet.Cell(2, 2).Value = 42.5;
             sheet.Cell(2, 3).Value = new DateTime(2026, 1, 15);
-            sheet.Cell(2, 4).Value = "Groceries";
-            sheet.Cell(2, 5).Value = "Roommates";
+            sheet.Cell(2, 4).Value = 101;
+            sheet.Cell(2, 5).Value = 55;
             sheet.Cell(2, 6).Value = "Weekly shop";
 
             workbook.SaveAs(pathWithDetails);

@@ -3,7 +3,7 @@ using SplitwiseCLI.Models;
 
 namespace SplitwiseCLI.Services;
 
-public sealed record CategoryLookup(IReadOnlyList<Category> Categories, IReadOnlyDictionary<string, long> SubcategoryIdsByName);
+public sealed record CategoryLookup(IReadOnlyList<Category> Categories, IReadOnlyDictionary<long, string> SubcategoryNamesById);
 
 public sealed class CategoryLookupService(ISplitwiseClient client)
 {
@@ -11,12 +11,12 @@ public sealed class CategoryLookupService(ISplitwiseClient client)
     {
         var categories = await client.GetCategoriesAsync(cancellationToken);
 
-        var byName = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        var namesById = new Dictionary<long, string>();
         foreach (var subcategory in categories.SelectMany(c => c.Subcategories))
         {
-            byName[subcategory.Name] = subcategory.Id;
+            namesById[subcategory.Id] = subcategory.Name;
         }
 
-        return new CategoryLookup(categories, byName);
+        return new CategoryLookup(categories, namesById);
     }
 }

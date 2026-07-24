@@ -8,12 +8,14 @@ public sealed class ValidatedExpenseRow
     public string? Details { get; init; }
     public required decimal Cost { get; init; }
     public required DateTime Date { get; init; }
-    public required string Category { get; init; }
-    public required string Group { get; init; }
+    public required long CategoryId { get; init; }
+    public required long GroupId { get; init; }
 }
 
 public static class ExpenseRowValidator
 {
+    private const NumberStyles IdNumberStyles = NumberStyles.Integer | NumberStyles.AllowThousands;
+
     public static (ValidatedExpenseRow? Row, string? Error) Validate(ExpenseRow row)
     {
         if (row.ParseError is not null)
@@ -26,12 +28,12 @@ public static class ExpenseRowValidator
             return (null, "Description is required.");
         }
 
-        if (string.IsNullOrWhiteSpace(row.Category))
+        if (string.IsNullOrWhiteSpace(row.RawCategory))
         {
             return (null, "Category is required.");
         }
 
-        if (string.IsNullOrWhiteSpace(row.Group))
+        if (string.IsNullOrWhiteSpace(row.RawGroup))
         {
             return (null, "Group is required.");
         }
@@ -51,14 +53,24 @@ public static class ExpenseRowValidator
             return (null, $"Date '{row.RawDate}' is not a valid date.");
         }
 
+        if (!long.TryParse(row.RawCategory, IdNumberStyles, CultureInfo.InvariantCulture, out var categoryId))
+        {
+            return (null, $"Category '{row.RawCategory}' is not a valid numeric category id.");
+        }
+
+        if (!long.TryParse(row.RawGroup, IdNumberStyles, CultureInfo.InvariantCulture, out var groupId))
+        {
+            return (null, $"Group '{row.RawGroup}' is not a valid numeric group id.");
+        }
+
         return (new ValidatedExpenseRow
         {
             Description = row.Description.Trim(),
             Details = string.IsNullOrWhiteSpace(row.Details) ? null : row.Details.Trim(),
             Cost = cost,
             Date = date,
-            Category = row.Category.Trim(),
-            Group = row.Group.Trim(),
+            CategoryId = categoryId,
+            GroupId = groupId,
         }, null);
     }
 }

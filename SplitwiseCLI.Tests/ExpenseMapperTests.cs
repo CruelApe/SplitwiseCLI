@@ -6,22 +6,21 @@ namespace SplitwiseCLI.Tests;
 
 public class ExpenseMapperTests
 {
-    private static ValidatedExpenseRow ValidRow(string category = "Groceries", string group = "Roommates", string? details = null) => new()
+    private static ValidatedExpenseRow ValidRow(long categoryId = 101, long groupId = 55, string? details = null) => new()
     {
         Description = "Groceries",
         Details = details,
         Cost = 42.5m,
         Date = new DateTime(2026, 1, 15),
-        Category = category,
-        Group = group,
+        CategoryId = categoryId,
+        GroupId = groupId,
     };
 
-    private static Dictionary<string, long> CategoryLookup() =>
-        new(StringComparer.OrdinalIgnoreCase) { ["Groceries"] = 101 };
+    private static Dictionary<long, string> CategoryLookup() => new() { [101] = "Groceries" };
 
-    private static Dictionary<string, Group> GroupLookup() => new(StringComparer.OrdinalIgnoreCase)
+    private static Dictionary<long, Group> GroupLookup() => new()
     {
-        ["Roommates"] = new Group { Id = 55, Name = "Roommates", Members = [new GroupMember { Id = 1 }, new GroupMember { Id = 2 }] },
+        [55] = new Group { Id = 55, Name = "Roommates", Members = [new GroupMember { Id = 1 }, new GroupMember { Id = 2 }] },
     };
 
     [Fact]
@@ -57,41 +56,60 @@ public class ExpenseMapperTests
     }
 
     [Fact]
-    public void Map_IsCaseInsensitive_ForCategoryAndGroupNames()
+    public void Map_FailsForUnknownCategoryId()
     {
-        var (request, error) = ExpenseMapper.Map(ValidRow("groceries", "roommates"), CategoryLookup(), GroupLookup(), "USD");
+        var (request, error) = ExpenseMapper.Map(ValidRow(categoryId: 999), CategoryLookup(), GroupLookup(), "USD");
+
+        Assert.Null(request);
+        Assert.Contains("999", error);
+    }
+
+    [Fact]
+    public void Map_FailsForUnknownGroupId()
+    {
+        var (request, error) = ExpenseMapper.Map(ValidRow(groupId: 999), CategoryLookup(), GroupLookup(), "USD");
+
+        Assert.Null(request);
+        Assert.Contains("999", error);
+    }
+
+    [Fact]
+    public void Map_OverwritesExistingDetails_WithJustTheBatchTag()
+    {
+        var (request, error) = ExpenseMapper.Map(
+            ValidRow(details: "Weekly shop"), CategoryLookup(), GroupLookup(), "USD", batchId: "202605-202607-a1b2c3");
 
         Assert.Null(error);
-        Assert.NotNull(request);
+        Assert.Equal("SPLITWISE_CLI_202605-202607-a1b2c3", request!.Details);
     }
 
     [Fact]
-    public void Map_FailsForUnknownCategory()
+    public void Map_UsesBatchTagAsOnlyDetails_WhenNoDetailsProvided()
     {
-        var (request, error) = ExpenseMapper.Map(ValidRow(category: "Nonexistent"), CategoryLookup(), GroupLookup(), "USD");
+        var (request, error) = ExpenseMapper.Map(ValidRow(), CategoryLookup(), GroupLookup(), "USD", batchId: "202605-202607-a1b2c3");
 
-        Assert.Null(request);
-        Assert.Contains("Nonexistent", error);
+        Assert.Null(error);
+        Assert.Equal("SPLITWISE_CLI_202605-202607-a1b2c3", request!.Details);
     }
 
     [Fact]
-    public void Map_FailsForUnknownGroup()
+    public void Map_LeavesDetailsUnchanged_WhenBatchIdOmitted()
     {
-        var (request, error) = ExpenseMapper.Map(ValidRow(group: "Nonexistent"), CategoryLookup(), GroupLookup(), "USD");
+        var (request, error) = ExpenseMapper.Map(ValidRow(details: "Weekly shop"), CategoryLookup(), GroupLookup(), "USD");
 
-        Assert.Null(request);
-        Assert.Contains("Nonexistent", error);
+        Assert.Null(error);
+        Assert.Equal("Weekly shop", request!.Details);
     }
 
     [Fact]
     public void Map_FailsForGroupWithNoMembers()
     {
-        var groupLookup = new Dictionary<string, Group>(StringComparer.OrdinalIgnoreCase)
+        var groupLookup = new Dictionary<long, Group>
         {
-            ["Empty"] = new Group { Id = 9, Name = "Empty", Members = [] },
+            [9] = new Group { Id = 9, Name = "Empty", Members = [] },
         };
 
-        var (request, error) = ExpenseMapper.Map(ValidRow(group: "Empty"), CategoryLookup(), groupLookup, "USD");
+        var (request, error) = ExpenseMapper.Map(ValidRow(groupId: 9), CategoryLookup(), groupLookup, "USD");
 
         Assert.Null(request);
         Assert.NotNull(error);
