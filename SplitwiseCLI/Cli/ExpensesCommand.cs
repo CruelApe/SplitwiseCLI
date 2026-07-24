@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Spectre.Console.Cli;
 using SplitwiseCLI.Models;
 using SplitwiseCLI.Output;
@@ -19,7 +20,7 @@ public sealed class ExpensesCommand(SplitwiseClientFactory clientFactory) : Asyn
             settings.Limit,
             settings.Offset);
 
-        var expenses = await client.GetExpensesAsync(filter, cancellationToken);
+        var expenses = await AnsiConsole.Status().StartAsync("Loading expenses...", _ => client.GetExpensesAsync(filter, cancellationToken));
         ExpenseRenderer.RenderList(expenses);
         return 0;
     }

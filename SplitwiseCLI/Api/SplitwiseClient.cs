@@ -171,6 +171,25 @@ public sealed class SplitwiseClient : ISplitwiseClient
         return body;
     }
 
+    public async Task DeleteExpenseAsync(long id, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendWithRetryAsync(
+            () => new HttpRequestMessage(HttpMethod.Post, $"delete_expense/{id}"), cancellationToken);
+
+        await EnsureTransportSuccessAsync(response, cancellationToken);
+
+        var body = await response.Content.ReadFromJsonAsync<DeleteExpenseResponse>(JsonOptions, cancellationToken)
+            ?? throw new SplitwiseApiException($"Splitwise returned an empty response for delete_expense/{id}.");
+
+        // Some POST endpoints return HTTP 200 even when the operation failed, so the
+        // body's success/errors must be checked explicitly rather than trusting the status code.
+        if (body.Success == false)
+        {
+            var errorText = body.Errors?.ToString() ?? "unknown error";
+            throw new SplitwiseApiException($"Splitwise rejected deleting expense {id}: {errorText}");
+        }
+    }
+
     private static string BuildQueryString(Dictionary<string, string?> parameters)
     {
         var pairs = parameters
