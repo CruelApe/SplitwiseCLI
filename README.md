@@ -5,7 +5,7 @@ A Windows command-line client for [Splitwise](https://www.splitwise.com/) — vi
 ## Features
 
 - Read your Splitwise account, groups, friends, expenses, comments, notifications, categories, and supported currencies
-- Bulk-import expenses from one or more Excel (`.xlsx`) files
+- Bulk-import expenses from one or more Excel (`.xlsx`) files, with a `rollback` command to undo a specific import run
 - Interactive shell mode for running multiple commands in one session
 - API key stored either via environment variable or encrypted locally (Windows DPAPI) — never in plain text in the repo
 
@@ -129,7 +129,8 @@ The interactive shell supports quoted arguments, e.g. `import "C:/My Expenses/*.
 | `categories` | — | List Splitwise expense categories as a tree (parent categories and their subcategories) |
 | `currencies` | — | List currency codes supported by Splitwise |
 | `notifications` | — | List your recent Splitwise activity notifications |
-| `import <path>` | `<path>` (file, directory, or glob) | Bulk-import expenses from Excel file(s) — see [docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md) |
+| `import <path>` | `<path>` (file, directory, or glob), `-y`/`--yes` | Bulk-import expenses from Excel file(s) — see [docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md) |
+| `rollback <batchId>` | `<batchId>`, `--dry-run`, `-y`/`--yes` | Delete all expenses created by a specific `import` run, identified by the batch id printed at the end of that run |
 | `config set-key` | — | Prompt for and save your Splitwise API key |
 | `config show` | — | Show whether an API key is configured and where it's stored |
 | `config clear` | — | Remove the saved API key |
@@ -152,13 +153,27 @@ splitwise import C:/expenses/january.xlsx
 splitwise import "C:/expenses/*.xlsx"
 ```
 
-Output is rendered as formatted tables/trees in the console; there is currently no JSON or other machine-readable output mode. Errors print as `Error: <message>` and the process exits with a non-zero code.
+Output is rendered as formatted tables/trees in the console; there is currently no JSON or other machine-readable output mode. Errors print as `Error: <message>` and the process exits with a non-zero code. Every command shows a loading spinner (or, for `import`/`rollback`'s multi-step work, a progress bar) while it's waiting on the Splitwise API, so it's always clear the CLI is doing something rather than hanging.
 
 ## Bulk import
 
-`splitwise import <path>` reads one or more `.xlsx` files (a single file, a directory of `.xlsx` files, or a glob pattern) and creates one Splitwise expense per row. Each row needs a `Description`, `Cost`, `Date`, `Category`, and `Group`, plus an optional `Details` column for notes; every expense is split **equally** across the named group's current members with you as the payer, and category/group names are validated live against your real Splitwise account.
+`splitwise import <path>` reads one or more `.xlsx` files (a single file, a directory of `.xlsx` files, or a glob pattern) and creates one Splitwise expense per row. Each row needs a `Description`, `Cost`, `Date`, `Category` (a numeric subcategory id), and `Group` (a numeric group id), plus an optional `Details` column for notes; every expense is split **equally** across the group's current members with you as the payer, and category/group ids are validated live against your real Splitwise account. IDs are used instead of names to avoid typo-prone matching — run `splitwise categories`/`splitwise groups` to look up the ids you need.
+
+If every row across every matched file validates with no errors, you're asked to confirm before anything is actually created in Splitwise (skip this with `-y`/`--yes`). If any row has an error, the prompt is skipped and today's behavior applies: valid rows are still created and invalid ones are reported as failures.
 
 See **[docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md)** for the full column reference, validation rules, and example data.
+
+## Rolling back an import
+
+Every expense created by `import` is tagged with a batch id in its `Details` field, and `import` prints that id (per file) when the run finishes. If a batch turns out to be wrong, undo it with:
+
+```powershell
+splitwise rollback 202605-202607-a1b2c3           # previews matches, then asks for confirmation
+splitwise rollback 202605-202607-a1b2c3 --dry-run # preview only, deletes nothing
+splitwise rollback 202605-202607-a1b2c3 --yes     # skip the confirmation prompt
+```
+
+See **[docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md#batch-ids-and-rollback)** for how batch ids are formed and matched.
 
 ## Development
 
