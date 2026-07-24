@@ -24,6 +24,7 @@ services.AddSingleton<NotificationsCommand>();
 services.AddSingleton<CurrenciesCommand>();
 services.AddSingleton<VersionCommand>();
 services.AddSingleton<AboutCommand>();
+services.AddSingleton<UpdateCommand>();
 
 var app = new CommandApp(new TypeRegistrar(services));
 app.Configure(config =>
@@ -108,6 +109,12 @@ app.Configure(config =>
 
     config.AddCommand<AboutCommand>("about")
         .WithDescription("Show information about SplitwiseCLI, including author and repository.");
+
+    config.AddCommand<UpdateCommand>("update")
+        .WithDescription("Check GitHub for a newer release and, if installed from a release zip, download and apply it.")
+        .WithExample("update")
+        .WithExample("update", "--check")
+        .WithExample("update", "--yes");
 });
 
 if (args.Length == 0)
