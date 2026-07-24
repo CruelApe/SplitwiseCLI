@@ -7,6 +7,7 @@ var services = new ServiceCollection();
 services.AddSingleton(new SplitwiseClientFactory());
 services.AddSingleton<CategoriesCommand>();
 services.AddSingleton<ImportCommand>();
+services.AddSingleton<RollbackCommand>();
 services.AddSingleton<ConfigSetKeyCommand>();
 services.AddSingleton<ConfigShowCommand>();
 services.AddSingleton<ConfigClearCommand>();
@@ -43,6 +44,12 @@ app.Configure(config =>
         .WithDescription("Bulk-import expenses from Excel file(s). Columns: Description, Cost, Date, Category, Group, and optional Details.")
         .WithExample("import", "C:/expenses/january.xlsx")
         .WithExample("import", "C:/expenses/*.xlsx");
+
+    config.AddCommand<RollbackCommand>("rollback")
+        .WithDescription("Delete all expenses created by a specific 'import' run, identified by the batch id printed at the end of that run.")
+        .WithExample("rollback", "202605-202607-a1b2c3")
+        .WithExample("rollback", "202605-202607-a1b2c3", "--dry-run")
+        .WithExample("rollback", "202605-202607-a1b2c3", "--yes");
 
     config.AddBranch("config", branch =>
     {

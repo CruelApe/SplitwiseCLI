@@ -56,8 +56,8 @@ public static class ExcelExpenseReader
                 Details = GetCellText(row, columnIndex, "Details"),
                 RawCost = GetCellText(row, columnIndex, "Cost"),
                 RawDate = GetCellText(row, columnIndex, "Date"),
-                Category = GetCellText(row, columnIndex, "Category"),
-                Group = GetCellText(row, columnIndex, "Group"),
+                RawCategory = GetCellText(row, columnIndex, "Category"),
+                RawGroup = GetCellText(row, columnIndex, "Group"),
             };
         }
         catch (Exception ex)

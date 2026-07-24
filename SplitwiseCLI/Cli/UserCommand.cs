@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Spectre.Console.Cli;
 using SplitwiseCLI.Output;
 
@@ -8,7 +9,7 @@ public sealed class UserCommand(SplitwiseClientFactory clientFactory) : AsyncCom
     protected override async Task<int> ExecuteAsync(CommandContext context, IdCommandSettings settings, CancellationToken cancellationToken)
     {
         var (client, _) = clientFactory.Create();
-        var user = await client.GetUserAsync(settings.Id, cancellationToken);
+        var user = await AnsiConsole.Status().StartAsync("Loading user...", _ => client.GetUserAsync(settings.Id, cancellationToken));
         UserRenderer.Render(user);
         return 0;
     }

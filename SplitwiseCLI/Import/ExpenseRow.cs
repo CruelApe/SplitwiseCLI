@@ -8,8 +8,8 @@ public sealed class ExpenseRow
     public string? Details { get; init; }
     public string? RawCost { get; init; }
     public string? RawDate { get; init; }
-    public string? Category { get; init; }
-    public string? Group { get; init; }
+    public string? RawCategory { get; init; }
+    public string? RawGroup { get; init; }
 
     // Set when the row itself couldn't be read (e.g. a malformed cell) so the
     // reader never has to throw and abort the rest of the file.

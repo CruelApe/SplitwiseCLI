@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Spectre.Console.Cli;
 using SplitwiseCLI.Output;
 
@@ -8,7 +9,7 @@ public sealed class NotificationsCommand(SplitwiseClientFactory clientFactory) :
     protected override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
     {
         var (client, _) = clientFactory.Create();
-        var notifications = await client.GetNotificationsAsync(cancellationToken);
+        var notifications = await AnsiConsole.Status().StartAsync("Loading notifications...", _ => client.GetNotificationsAsync(cancellationToken));
         NotificationRenderer.RenderList(notifications);
         return 0;
     }
