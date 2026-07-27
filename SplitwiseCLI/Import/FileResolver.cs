@@ -9,10 +9,11 @@ public static class FileResolver
 {
     private static readonly char[] WildcardChars = ['*', '?'];
 
-    public static IReadOnlyList<string> Resolve(string pathOrPattern)
+    public static IReadOnlyList<string> Resolve(string pathOrPattern, IReadOnlyList<string>? extensionPatterns = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pathOrPattern);
 
+        var patterns = extensionPatterns ?? ["*.xlsx"];
         var normalized = pathOrPattern.Replace('/', Path.DirectorySeparatorChar);
 
         if (!ContainsWildcard(normalized))
@@ -24,8 +25,10 @@ public static class FileResolver
 
             if (Directory.Exists(normalized))
             {
-                return Directory.GetFiles(normalized, "*.xlsx", SearchOption.TopDirectoryOnly)
+                return patterns
+                    .SelectMany(pattern => Directory.GetFiles(normalized, pattern, SearchOption.TopDirectoryOnly))
                     .Select(Path.GetFullPath)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
                     .ToList();
             }
