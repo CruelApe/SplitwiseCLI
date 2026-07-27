@@ -24,11 +24,7 @@ public sealed class ImportOrchestrator(
     // expense actually gets created.
     public async Task<ImportPlan> PrepareAsync(IReadOnlyList<string> filePaths, CancellationToken cancellationToken = default)
     {
-        var currentUser = await client.GetCurrentUserAsync(cancellationToken);
-        var defaultCurrency = config.DefaultCurrencyOverride ?? currentUser.DefaultCurrency
-            ?? throw new SplitwiseApiException(
-                "Could not determine a currency to use: no SPLITWISE_DEFAULT_CURRENCY override is set and the " +
-                "Splitwise account has no default currency.");
+        var defaultCurrency = await CurrencyResolver.ResolveAsync(client, config, cancellationToken);
 
         var categoryLookup = await categoryLookupService.LoadAsync(cancellationToken);
         var groupLookup = await groupLookupService.LoadAsync(cancellationToken);
