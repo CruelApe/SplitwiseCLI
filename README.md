@@ -6,6 +6,7 @@ A Windows command-line client for [Splitwise](https://www.splitwise.com/) — vi
 
 - Read your Splitwise account, groups, friends, expenses, comments, notifications, categories, and supported currencies
 - Bulk-import expenses from one or more Excel (`.xlsx`) files, with a `rollback` command to undo a specific import run
+- Merge several already-formatted import workbooks and/or recognized PDF bank/credit-card statements into one file with live Category/Group reference sheets, ready for `import`
 - Interactive shell mode for running multiple commands in one session
 - API key stored either via environment variable or encrypted locally (Windows DPAPI) — never in plain text in the repo
 - Self-update (`splitwise update`) checks GitHub Releases and, if installed from a release zip, downloads and applies the new version in place
@@ -131,6 +132,7 @@ The interactive shell supports quoted arguments, e.g. `import "C:/My Expenses/*.
 | `currencies` | — | List currency codes supported by Splitwise |
 | `notifications` | — | List your recent Splitwise activity notifications |
 | `import <path>` | `<path>` (file, directory, or glob), `-y`/`--yes` | Bulk-import expenses from Excel file(s) — see [docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md) |
+| `merge <paths>` | one or more `<path>` (file, directory, or glob), `-o`/`--output <file>` | Merge several already-formatted import workbooks and/or recognized PDF statements into one, with live Category/Group reference sheets — see [docs/MERGE_FORMAT.md](docs/MERGE_FORMAT.md) |
 | `rollback <batchId>` | `<batchId>`, `--dry-run`, `-y`/`--yes` | Delete all expenses created by a specific `import` run, identified by the batch id printed at the end of that run |
 | `config set-key` | — | Prompt for and save your Splitwise API key |
 | `config show` | — | Show whether an API key is configured and where it's stored |
@@ -164,6 +166,17 @@ Output is rendered as formatted tables/trees in the console; there is currently 
 If every row across every matched file validates with no errors, you're asked to confirm before anything is actually created in Splitwise (skip this with `-y`/`--yes`). If any row has an error, the prompt is skipped and today's behavior applies: valid rows are still created and invalid ones are reported as failures.
 
 See **[docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md)** for the full column reference, validation rules, and example data.
+
+## Merging multiple files
+
+`splitwise merge <path> [<path> ...]` combines several already-formatted `import`-style workbooks — and/or recognized PDF bank/credit-card statements (Latitude Go Mastercard, Coles Platinum Mastercard, NAB Classic Banking) — into one, so you can build up a month's (or a range's) expenses from several source files before running `import` once on the result:
+
+```powershell
+splitwise merge jan.xlsx feb.xlsx
+splitwise merge "C:/statements/*.xlsx" march-statement.pdf --output combined.xlsx
+```
+
+The output workbook has an `Expenses` sheet (with your rows' `Category`/`Group` ids plus formula-driven `Category Name`/`Group Name` columns for readability) and `Category Reference Data`/`Group Reference Data` sheets populated live from your account, so you can look up or double-check ids before importing. The `Category`/`Group` columns are also set up as Excel dropdowns sourced from those reference sheets, so filling in (or fixing) an id is pick-from-list rather than copy-paste. Rows extracted from a PDF statement have `Category`/`Group` left blank for you to fill in — there's no id to carry over from a bank statement. `merge` never calls Splitwise's create/delete endpoints — it's a local file-combining step. See **[docs/MERGE_FORMAT.md](docs/MERGE_FORMAT.md)** for the full output format reference, including known limitations of the PDF parsing.
 
 ## Rolling back an import
 

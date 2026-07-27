@@ -7,6 +7,7 @@ var services = new ServiceCollection();
 services.AddSingleton(new SplitwiseClientFactory());
 services.AddSingleton<CategoriesCommand>();
 services.AddSingleton<ImportCommand>();
+services.AddSingleton<MergeCommand>();
 services.AddSingleton<RollbackCommand>();
 services.AddSingleton<ConfigSetKeyCommand>();
 services.AddSingleton<ConfigShowCommand>();
@@ -45,6 +46,11 @@ app.Configure(config =>
         .WithDescription("Bulk-import expenses from Excel file(s). Columns: Description, Cost, Date, Category, Group, and optional Details.")
         .WithExample("import", "C:/expenses/january.xlsx")
         .WithExample("import", "C:/expenses/*.xlsx");
+
+    config.AddCommand<MergeCommand>("merge")
+        .WithDescription("Merge multiple already-formatted import xlsx files and/or recognized PDF bank statements into one workbook with live Category/Group reference sheets.")
+        .WithExample("merge", "jan.xlsx", "feb.xlsx")
+        .WithExample("merge", "C:/statements/*.xlsx", "statement.pdf", "--output", "combined.xlsx");
 
     config.AddCommand<RollbackCommand>("rollback")
         .WithDescription("Delete all expenses created by a specific 'import' run, identified by the batch id printed at the end of that run.")
