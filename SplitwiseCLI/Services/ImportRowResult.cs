@@ -12,4 +12,5 @@ public sealed record ImportRowResult(
     string? Date = null,
     long? CategoryId = null,
     long? GroupId = null,
-    string? Details = null);
+    string? Details = null,
+    string? DuplicateReason = null);

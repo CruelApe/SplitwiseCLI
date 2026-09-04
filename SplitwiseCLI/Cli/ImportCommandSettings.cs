@@ -12,4 +12,8 @@ public sealed class ImportCommandSettings : CommandSettings
     [CommandOption("-y|--yes")]
     [Description("Skip the confirmation prompt shown when every row validates cleanly.")]
     public bool Yes { get; init; }
+
+    [CommandOption("--include-duplicates")]
+    [Description("Create rows flagged as possible duplicates instead of skipping them.")]
+    public bool IncludeDuplicates { get; init; }
 }
