@@ -227,9 +227,217 @@ public class ImportOrchestratorTests : IDisposable
         Assert.Equal(2, batchIds.Count);
     }
 
+    [Fact]
+    public async Task CreateAsync_SkipsExactDuplicate_OfAnExistingExpense()
+    {
+        var file = WriteWorkbook(("Good expense", "10.00", "2026-01-01", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        client.ExistingExpenses.Add(new Expense
+        {
+            Id = 999,
+            Description = "Good expense",
+            Cost = "10.00",
+            Date = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            Category = new ExpenseCategoryRef { Id = 101 },
+            GroupId = 55,
+        });
+
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var results = await orchestrator.RunAsync([file]);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success);
+        Assert.Null(result.ExpenseId);
+        Assert.Contains("Exact duplicate", result.DuplicateReason);
+        Assert.Empty(client.CreatedExpenses);
+    }
+
+    [Fact]
+    public async Task CreateAsync_SkipsPossibleDuplicate_WhenDateIsAFewDaysOff()
+    {
+        var file = WriteWorkbook(("Good expense", "10.00", "2026-01-04", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        client.ExistingExpenses.Add(new Expense
+        {
+            Id = 999,
+            Description = "Good expense",
+            Cost = "10.00",
+            Date = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            Category = new ExpenseCategoryRef { Id = 101 },
+            GroupId = 55,
+        });
+
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var results = await orchestrator.RunAsync([file]);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success);
+        Assert.Null(result.ExpenseId);
+        Assert.Contains("Possible duplicate", result.DuplicateReason);
+        Assert.Empty(client.CreatedExpenses);
+    }
+
+    [Fact]
+    public async Task CreateAsync_DoesNotFlagDuplicate_WhenDatesAreExactlyAWeekApart()
+    {
+        var file = WriteWorkbook(("Good expense", "10.00", "2026-01-08", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        client.ExistingExpenses.Add(new Expense
+        {
+            Id = 999,
+            Description = "Good expense",
+            Cost = "10.00",
+            Date = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            Category = new ExpenseCategoryRef { Id = 101 },
+            GroupId = 55,
+        });
+
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var results = await orchestrator.RunAsync([file]);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success);
+        Assert.NotNull(result.ExpenseId);
+        Assert.Null(result.DuplicateReason);
+        Assert.Single(client.CreatedExpenses);
+    }
+
+    [Fact]
+    public async Task CreateAsync_DoesNotFlagDuplicate_WhenExistingExpenseIsAWeekAfterTheImportedRow()
+    {
+        // Same exemption as above, but the existing expense is dated later than the
+        // imported row (not earlier) - confirms both directions are covered.
+        var file = WriteWorkbook(("Good expense", "10.00", "2026-01-01", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        client.ExistingExpenses.Add(new Expense
+        {
+            Id = 999,
+            Description = "Good expense",
+            Cost = "10.00",
+            Date = new DateTimeOffset(2026, 1, 8, 0, 0, 0, TimeSpan.Zero),
+            Category = new ExpenseCategoryRef { Id = 101 },
+            GroupId = 55,
+        });
+
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var results = await orchestrator.RunAsync([file]);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success);
+        Assert.NotNull(result.ExpenseId);
+        Assert.Null(result.DuplicateReason);
+        Assert.Single(client.CreatedExpenses);
+    }
+
+    [Fact]
+    public async Task CreateAsync_DoesNotFlagDuplicate_WhenDatesAreTwoWeeksApart()
+    {
+        // 7 days+ - any exact multiple of a week (not just one week) is treated as
+        // a legitimate recurring charge.
+        var file = WriteWorkbook(("Good expense", "10.00", "2026-01-15", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        client.ExistingExpenses.Add(new Expense
+        {
+            Id = 999,
+            Description = "Good expense",
+            Cost = "10.00",
+            Date = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            Category = new ExpenseCategoryRef { Id = 101 },
+            GroupId = 55,
+        });
+
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var results = await orchestrator.RunAsync([file]);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success);
+        Assert.NotNull(result.ExpenseId);
+        Assert.Null(result.DuplicateReason);
+        Assert.Single(client.CreatedExpenses);
+    }
+
+    [Fact]
+    public async Task CreateAsync_CreatesFlaggedDuplicate_WhenIncludeDuplicatesIsTrue()
+    {
+        var file = WriteWorkbook(("Good expense", "10.00", "2026-01-01", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        client.ExistingExpenses.Add(new Expense
+        {
+            Id = 999,
+            Description = "Good expense",
+            Cost = "10.00",
+            Date = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            Category = new ExpenseCategoryRef { Id = 101 },
+            GroupId = 55,
+        });
+
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var plan = await orchestrator.PrepareAsync([file]);
+        var results = await orchestrator.CreateAsync(plan, includeDuplicates: true);
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success);
+        Assert.NotNull(result.ExpenseId);
+        Assert.NotNull(result.DuplicateReason);
+        Assert.Single(client.CreatedExpenses);
+    }
+
+    [Fact]
+    public async Task SkippedDuplicate_DoesNotCountAsAFailure()
+    {
+        var file = WriteWorkbook(("Good expense", "10.00", "2026-01-01", "101", "55"));
+
+        var client = new FakeSplitwiseClient();
+        client.ExistingExpenses.Add(new Expense
+        {
+            Id = 999,
+            Description = "Good expense",
+            Cost = "10.00",
+            Date = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            Category = new ExpenseCategoryRef { Id = 101 },
+            GroupId = 55,
+        });
+
+        var orchestrator = new ImportOrchestrator(
+            client, new CategoryLookupService(client), new GroupLookupService(client),
+            new AppConfig("key", "https://example.invalid", null));
+
+        var results = await orchestrator.RunAsync([file]);
+
+        Assert.DoesNotContain(results, r => !r.Success);
+    }
+
     private sealed class FakeSplitwiseClient : ISplitwiseClient
     {
         public List<CreateExpenseRequest> CreatedExpenses { get; } = [];
+
+        // Seeded by tests to represent expenses that already exist in Splitwise, so
+        // duplicate-detection has something to match against.
+        public List<Expense> ExistingExpenses { get; } = [];
 
         public Task<User> GetCurrentUserAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new User { Id = 1, DefaultCurrency = "USD" });
@@ -254,7 +462,8 @@ public class ImportOrchestratorTests : IDisposable
 
         public Task<Friend> GetFriendAsync(long id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public Task<List<Expense>> GetExpensesAsync(ExpenseFilter filter, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<List<Expense>> GetExpensesAsync(ExpenseFilter filter, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ExistingExpenses);
 
         public Task<Expense> GetExpenseAsync(long id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 

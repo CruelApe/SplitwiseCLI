@@ -23,10 +23,13 @@ public sealed class ImportCommand(SplitwiseClientFactory clientFactory) : AsyncC
 
         var (client, config) = clientFactory.Create();
         var orchestrator = new ImportOrchestrator(
-            client, new CategoryLookupService(client), new GroupLookupService(client), config);
+            client, new CategoryLookupService(client), new GroupLookupService(client), config,
+            new DuplicateExpenseDetector(client));
 
         var plan = await AnsiConsole.Status()
             .StartAsync("Validating rows...", _ => orchestrator.PrepareAsync(files, cancellationToken));
+
+        WarnAboutDuplicates(plan, settings.IncludeDuplicates);
 
         // Only prompt when the whole run validated cleanly - if anything failed,
         // fall straight through to today's behavior (create what's valid, report the rest).
@@ -37,7 +40,7 @@ public sealed class ImportCommand(SplitwiseClientFactory clientFactory) : AsyncC
             return 1;
         }
 
-        var results = await CreateWithProgressAsync(orchestrator, plan, cancellationToken);
+        var results = await CreateWithProgressAsync(orchestrator, plan, settings.IncludeDuplicates, cancellationToken);
         ImportSummaryRenderer.Render(results);
 
         await OfferRollbackForPartiallyFailedBatchesAsync(client, results, settings.Yes, cancellationToken);
@@ -48,11 +51,11 @@ public sealed class ImportCommand(SplitwiseClientFactory clientFactory) : AsyncC
     // No rows means nothing to create - AddTask with a zero maxValue isn't a
     // meaningful progress bar, so skip it entirely in that case.
     private static async Task<IReadOnlyList<ImportRowResult>> CreateWithProgressAsync(
-        ImportOrchestrator orchestrator, ImportPlan plan, CancellationToken cancellationToken)
+        ImportOrchestrator orchestrator, ImportPlan plan, bool includeDuplicates, CancellationToken cancellationToken)
     {
         if (plan.Rows.Count == 0)
         {
-            return await orchestrator.CreateAsync(plan, cancellationToken: cancellationToken);
+            return await orchestrator.CreateAsync(plan, includeDuplicates, cancellationToken: cancellationToken);
         }
 
         var results = (IReadOnlyList<ImportRowResult>)[];
@@ -61,10 +64,41 @@ public sealed class ImportCommand(SplitwiseClientFactory clientFactory) : AsyncC
             {
                 var task = ctx.AddTask("Creating expenses", maxValue: plan.Rows.Count);
                 results = await orchestrator.CreateAsync(
-                    plan, onRowProcessed: count => task.Value = count, cancellationToken: cancellationToken);
+                    plan, includeDuplicates, onRowProcessed: count => task.Value = count, cancellationToken: cancellationToken);
             });
 
         return results;
+    }
+
+    // Surfaced before the confirmation prompt so the user knows what's about to be
+    // skipped (or, with --include-duplicates, created anyway) before committing.
+    private static void WarnAboutDuplicates(ImportPlan plan, bool includeDuplicates)
+    {
+        var duplicates = plan.Rows.Where(r => r.DuplicateReason is not null).ToList();
+        if (duplicates.Count == 0)
+        {
+            return;
+        }
+
+        var action = includeDuplicates ? "will still be created because --include-duplicates was passed" : "will be skipped";
+        AnsiConsole.MarkupLine($"[yellow]{duplicates.Count} possible duplicate(s) found - they {action}.[/]");
+
+        var table = new Table().Border(TableBorder.Rounded);
+        table.AddColumn("File");
+        table.AddColumn("Row");
+        table.AddColumn("Description");
+        table.AddColumn("Reason");
+
+        foreach (var duplicate in duplicates)
+        {
+            table.AddRow(
+                Path.GetFileName(duplicate.SourceFile).EscapeMarkup(),
+                duplicate.RowNumber.ToString(),
+                (duplicate.Description ?? "-").EscapeMarkup(),
+                duplicate.DuplicateReason!.EscapeMarkup());
+        }
+
+        AnsiConsole.Write(table);
     }
 
     // A batch that's part-succeeded, part-failed is left in a half-imported state -
