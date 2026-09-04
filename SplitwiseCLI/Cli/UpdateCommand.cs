@@ -34,6 +34,16 @@ public sealed class UpdateCommand : AsyncCommand<UpdateCommandSettings>
         var installMethod = InstallMethodDetector.Detect();
         if (installMethod != InstallMethod.ReleaseZip)
         {
+            if (installMethod == InstallMethod.GlobalTool)
+            {
+                var repoRoot = LocalCheckoutLocator.Find(
+                    Directory.GetCurrentDirectory(), AppInfo.RepositoryUrl, GlobalToolUpdater.GetRemoteOriginUrl);
+                if (repoRoot is not null)
+                {
+                    return await UpdateGlobalToolFromSourceAsync(repoRoot, release.TagName, settings, cancellationToken);
+                }
+            }
+
             PrintManualUpdateInstructions(installMethod);
             return 0;
         }
@@ -83,6 +93,59 @@ public sealed class UpdateCommand : AsyncCommand<UpdateCommandSettings>
     {
         var segments = new Uri(repositoryUrl).AbsolutePath.Trim('/').Split('/');
         return (segments[0], segments[1]);
+    }
+
+    // GlobalTool installs can't be file-replaced (their real files live in the
+    // NuGet tool store), but when 'update' is run from inside the maintainer's
+    // own local clone, the same git-pull + dotnet-pack + dotnet-tool-update
+    // sequence PrintManualUpdateInstructions tells everyone else to run by hand
+    // can just be run automatically here.
+    private static async Task<int> UpdateGlobalToolFromSourceAsync(
+        string repoRoot, string targetTag, UpdateCommandSettings settings, CancellationToken cancellationToken)
+    {
+        AnsiConsole.MarkupLine(
+            $"You installed SplitwiseCLI as a .NET global tool, but this looks like your local checkout at [grey]{repoRoot.EscapeMarkup()}[/] - " +
+            "it can be pulled, repacked, and reinstalled automatically.");
+
+        if (settings.CheckOnly)
+        {
+            AnsiConsole.MarkupLine("Run [bold]splitwise update[/] to pull, repack, and reinstall it.");
+            return 0;
+        }
+
+        if (!settings.Yes && !AnsiConsole.Confirm($"Pull the latest changes, repack, and reinstall the global tool ({targetTag})?"))
+        {
+            AnsiConsole.MarkupLine("[yellow]Aborted - no changes made.[/]");
+            return 1;
+        }
+
+        var steps = new (string Label, Func<Task<ProcessResult>> Run)[]
+        {
+            ("Pulling latest changes (git pull --ff-only)...", () => GlobalToolUpdater.RunGitPullAsync(repoRoot, cancellationToken)),
+            ("Packing the tool (dotnet pack)...", () => GlobalToolUpdater.RunDotnetPackAsync(repoRoot, cancellationToken)),
+            ("Reinstalling the global tool (dotnet tool update)...", () => GlobalToolUpdater.RunToolUpdateAsync(repoRoot, cancellationToken)),
+        };
+
+        foreach (var (label, run) in steps)
+        {
+            var result = await AnsiConsole.Status().StartAsync(label, _ => run());
+            if (!result.Success)
+            {
+                AnsiConsole.MarkupLine($"[red]'{label}' failed - nothing further was changed.[/]");
+                if (!string.IsNullOrWhiteSpace(result.Output))
+                {
+                    AnsiConsole.WriteLine(result.Output);
+                }
+
+                AnsiConsole.MarkupLine("Resolve the issue above, or fall back to running these manually:");
+                PrintManualUpdateInstructions(InstallMethod.GlobalTool);
+                return 1;
+            }
+        }
+
+        AnsiConsole.MarkupLine(
+            $"[green]Updated.[/] Run [bold]splitwise about[/] to confirm you're now on {targetTag.EscapeMarkup()}.");
+        return 0;
     }
 
     private static void PrintManualUpdateInstructions(InstallMethod method)
