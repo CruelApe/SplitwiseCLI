@@ -11,7 +11,8 @@ public sealed record ImportPlanRow(
     string? Description,
     CreateExpenseRequest? Request,
     string? Error,
-    string? BatchId);
+    string? BatchId,
+    string? DuplicateReason = null);
 
 public sealed record ImportPlan(IReadOnlyList<ImportPlanRow> Rows)
 {
