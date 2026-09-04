@@ -131,7 +131,7 @@ The interactive shell supports quoted arguments, e.g. `import "C:/My Expenses/*.
 | `categories` | — | List Splitwise expense categories as a tree (parent categories and their subcategories) |
 | `currencies` | — | List currency codes supported by Splitwise |
 | `notifications` | — | List your recent Splitwise activity notifications |
-| `import <path>` | `<path>` (file, directory, or glob), `-y`/`--yes` | Bulk-import expenses from Excel file(s) — see [docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md) |
+| `import <path>` | `<path>` (file, directory, or glob), `-y`/`--yes`, `--include-duplicates` | Bulk-import expenses from Excel file(s) — see [docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md) |
 | `merge <paths>` | one or more `<path>` (file, directory, or glob), `-o`/`--output <file>` | Merge several already-formatted import workbooks and/or recognized PDF statements into one, with live Category/Group reference sheets — see [docs/MERGE_FORMAT.md](docs/MERGE_FORMAT.md) |
 | `rollback <batchId>` | `<batchId>`, `--dry-run`, `-y`/`--yes` | Delete all expenses created by a specific `import` run, identified by the batch id printed at the end of that run |
 | `config set-key` | — | Prompt for and save your Splitwise API key |
@@ -165,7 +165,9 @@ Output is rendered as formatted tables/trees in the console; there is currently 
 
 If every row across every matched file validates with no errors, you're asked to confirm before anything is actually created in Splitwise (skip this with `-y`/`--yes`). If any row has an error, the prompt is skipped and today's behavior applies: valid rows are still created and invalid ones are reported as failures.
 
-See **[docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md)** for the full column reference, validation rules, and example data.
+Before that, every validated row is also checked against expenses that already exist in Splitwise, and flagged as a duplicate when `Description`, `Cost`, `Category`, and `Group` all match and the `Date` is off by anything other than an exact multiple of a week (7, 14, 21, ... days, before or after — treated as a legitimate recurring charge, not a duplicate). Flagged rows are **skipped** by default — not created, and not counted as failures — with a warning table shown before the confirmation prompt; pass `--include-duplicates` to create them anyway.
+
+See **[docs/IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md)** for the full column reference, validation rules, duplicate-detection rules, and example data.
 
 ## Merging multiple files
 
