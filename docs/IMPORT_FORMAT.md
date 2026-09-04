@@ -123,13 +123,31 @@ Before creating anything, `import` fully validates and maps **every** row across
 
 Pass `-y`/`--yes` to skip the confirmation prompt (e.g. for scripted/non-interactive use) — the run proceeds exactly as if you'd answered yes.
 
+## Duplicate detection
+
+During the same pre-flight pass, every row that validates cleanly is also checked against expenses that **already exist in Splitwise**, so re-importing overlapping data (or a bank statement covering expenses you already entered by hand) doesn't create duplicates. A row is flagged when it matches an existing expense on `Description`, `Cost`, `Category`, and `Group`, and then further classified by how far apart the two dates are:
+
+| Condition | Result |
+|---|---|
+| `Date` also matches exactly | **Exact duplicate** — `Exact duplicate of expense #<id> - same description, cost, date, category and group.` |
+| `Date` differs by an exact multiple of 7 days (7, 14, 21, ...), **before or after** | Not flagged — treated as a legitimate recurring weekly charge (e.g. a subscription) |
+| `Date` differs by anything else | **Possible duplicate** — `Possible duplicate of expense #<id> - same description, cost, category and group, <n> day(s) apart (not an exact multiple of a week).` |
+
+The week-apart check works in both directions — an existing expense dated a week (or two, or three, ...) *before or after* the imported row is equally exempt. The check queries Splitwise once per `import` run for expenses dated within 35 days on either side of the earliest and latest `Date` across every row being imported — comfortably wide enough to catch several weekly cycles without scanning your full expense history. It only compares against real Splitwise data; it does not compare rows within the same import file/batch to each other.
+
+**By default, flagged rows are skipped** — they are not sent to Splitwise's `create_expense` endpoint, and are not counted as failures (a run with only skipped duplicates still exits `0`). Before the confirmation prompt, a warning and a table (File, Row, Description, Reason) list every flagged row. Pass `--include-duplicates` to create them anyway:
+
+```powershell
+splitwise import C:/expenses/january.xlsx --include-duplicates
+```
+
 ## Activity feedback
 
 While `import` runs, it shows what it's doing: a spinner labeled "Validating rows..." during the pre-flight validation/mapping pass, then a progress bar labeled "Creating expenses" that advances by one for every row processed (success or failure) during the actual creation pass. On a run with zero rows to create, the progress bar is skipped entirely.
 
 ## Summary output and exit codes
 
-After processing, the CLI prints a summary line (`N succeeded / N failed`), then a table of every **successfully** created expense (Expense Id, File, Description, Cost, Date, Category Id, Group Id, and the exact `Details` value that was sent — i.e. the batch tag), then a table listing the File, Row, Description, and Reason for every **failed** row, and finally a **batch id** line per file (see below). The process exits with code `1` if any row failed across any file, or `0` if every row succeeded.
+After processing, the CLI prints a summary line (`N created / N skipped as duplicate(s) / N failed`), then a table of every **created** expense (Expense Id, File, Description, Cost, Date, Category Id, Group Id, and the exact `Details` value that was sent — i.e. the batch tag), then a table of every row **skipped as a duplicate** (File, Row, Description, Reason), then a table listing the File, Row, Description, and Reason for every **failed** row, and finally a **batch id** line per file (see below). The process exits with code `1` if any row failed across any file — skipped duplicates alone never cause a non-zero exit code — or `0` otherwise.
 
 ## Batch ids and rollback
 
