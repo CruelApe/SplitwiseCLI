@@ -12,5 +12,5 @@ public interface IStatementParser
 
     // CategoryId/GroupId on every returned row are always null - PDF-derived
     // rows are left blank for the user to review and fill in by hand.
-    IReadOnlyList<MergedExpenseRow> Parse(string sourceFile, string text);
+    StatementParseResult Parse(string sourceFile, string text);
 }
