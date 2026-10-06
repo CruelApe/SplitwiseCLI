@@ -23,7 +23,7 @@ public class ColesPlatinumStatementParserTests
             02/05/26 01/05/26 Coles Supermarket Greenvale $45.67 Dr
             """;
 
-        var rows = _parser.Parse("statement.pdf", Text);
+        var rows = _parser.Parse("statement.pdf", Text).Rows;
 
         var row = Assert.Single(rows);
         Assert.Equal("Coles Supermarket Greenvale", row.Description);
@@ -41,7 +41,7 @@ public class ColesPlatinumStatementParserTests
             03/05/26 02/05/26 BPAY Payment Received $200.00 Cr
             """;
 
-        var rows = _parser.Parse("statement.pdf", Text);
+        var rows = _parser.Parse("statement.pdf", Text).Rows;
 
         Assert.Empty(rows);
     }
