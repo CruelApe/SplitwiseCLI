@@ -15,7 +15,7 @@ public sealed partial class ColesPlatinumStatementParser : IStatementParser
     public bool CanParse(string text) =>
         StatementTextUtils.HasHeaderLine(text, "Processed Date", "Transaction Date", "Details", "Amount");
 
-    public IReadOnlyList<MergedExpenseRow> Parse(string sourceFile, string text)
+    public StatementParseResult Parse(string sourceFile, string text)
     {
         var rows = new List<MergedExpenseRow>();
 
@@ -45,6 +45,6 @@ public sealed partial class ColesPlatinumStatementParser : IStatementParser
             rows.Add(new MergedExpenseRow(sourceFile, description, cost, date, null, null, null));
         }
 
-        return rows;
+        return new StatementParseResult(rows, []);
     }
 }

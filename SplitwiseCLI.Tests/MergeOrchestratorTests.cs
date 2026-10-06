@@ -251,6 +251,25 @@ public class MergeOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task PrepareAsync_ReportsStatementParserIssues_AlongsideTheRowsItCouldRead()
+    {
+        const string LatitudeText = """
+            Date Card Description Debits Credits
+            04/07/2026 1234 Anthropic* Claude Sub San Francisco Ca
+            05/07/2026 1234 Kmart 1262 Broadmeadows Vic $114.45
+            """;
+
+        var plan = await CreateOrchestrator(new FakeSplitwiseClient(), new FakeTextExtractor(LatitudeText))
+            .PrepareAsync(["statement.pdf"]);
+
+        var row = Assert.Single(plan.Rows);
+        Assert.Equal("Kmart 1262 Broadmeadows Vic", row.Description);
+        var issue = Assert.Single(plan.Issues);
+        Assert.Equal("statement.pdf", issue.SourceFile);
+        Assert.Equal("Anthropic* Claude Sub San Francisco Ca", issue.Description);
+    }
+
+    [Fact]
     public async Task PrepareAsync_ReportsIssue_ForUnsupportedFileType()
     {
         var plan = await CreateOrchestrator(new FakeSplitwiseClient()).PrepareAsync(["notes.txt"]);
