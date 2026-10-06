@@ -95,7 +95,9 @@ public sealed class MergeOrchestrator(
 
         try
         {
-            rows.AddRange(_statementParserRegistry.Parse(filePath, text));
+            var result = _statementParserRegistry.Parse(filePath, text);
+            rows.AddRange(result.Rows);
+            issues.AddRange(result.Issues);
         }
         catch (Exception ex)
         {
