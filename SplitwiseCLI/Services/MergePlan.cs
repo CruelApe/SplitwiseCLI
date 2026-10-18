@@ -24,4 +24,11 @@ public sealed record MergePlan(
     IReadOnlyList<MergeRowIssue> Issues,
     IReadOnlyList<Category> Categories,
     IReadOnlyList<Group> Groups,
-    string DefaultCurrency);
+    string DefaultCurrency)
+{
+    // Rows classified as personal / non-group spending - written to their own
+    // "Non-Expense" sheet instead of "Expenses". Group id is always 0 for these.
+    public IReadOnlyList<MergedExpenseRow> NonExpenseRows { get; init; } = [];
+
+    public IReadOnlyList<MergedExpenseRow> AllRows => [.. Rows, .. NonExpenseRows];
+}
