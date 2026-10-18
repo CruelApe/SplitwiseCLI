@@ -1,6 +1,7 @@
 using System.Globalization;
 using ClosedXML.Excel;
 using SplitwiseCLI.Api;
+using SplitwiseCLI.Classification;
 using SplitwiseCLI.Configuration;
 using SplitwiseCLI.Import;
 using SplitwiseCLI.Models;
@@ -26,7 +27,10 @@ public sealed class MergeOrchestrator(
         var categoryLookup = await categoryLookupService.LoadAsync(cancellationToken);
         var groupLookup = await groupLookupService.LoadAsync(cancellationToken);
 
+        var classifier = new ExpenseClassifier(DefaultClassificationRules.All, categoryLookup.Categories, groupLookup.Groups);
+
         var rows = new List<MergedExpenseRow>();
+        var nonExpenseRows = new List<MergedExpenseRow>();
         var issues = new List<MergeRowIssue>();
 
         foreach (var filePath in filePaths)
@@ -37,7 +41,7 @@ public sealed class MergeOrchestrator(
                     ProcessXlsxFile(filePath, rows, issues);
                     break;
                 case ".pdf":
-                    ProcessPdfFile(filePath, rows, issues);
+                    ProcessPdfFile(filePath, classifier, rows, nonExpenseRows, issues);
                     break;
                 default:
                     issues.Add(new MergeRowIssue(filePath, 0, null,
@@ -49,7 +53,10 @@ public sealed class MergeOrchestrator(
         // Group id 0 is Splitwise's pseudo-group for non-group expenses - excluded
         // here the same way GroupLookupService.GroupsById already excludes it.
         var groups = groupLookup.Groups.Where(g => g.Id != 0).ToList();
-        return new MergePlan(rows, issues, categoryLookup.Categories, groups, defaultCurrency);
+        return new MergePlan(rows, issues, categoryLookup.Categories, groups, defaultCurrency)
+        {
+            NonExpenseRows = nonExpenseRows,
+        };
     }
 
     private static void ProcessXlsxFile(string filePath, List<MergedExpenseRow> rows, List<MergeRowIssue> issues)
@@ -80,7 +87,12 @@ public sealed class MergeOrchestrator(
         }
     }
 
-    private void ProcessPdfFile(string filePath, List<MergedExpenseRow> rows, List<MergeRowIssue> issues)
+    private void ProcessPdfFile(
+        string filePath,
+        ExpenseClassifier classifier,
+        List<MergedExpenseRow> rows,
+        List<MergedExpenseRow> nonExpenseRows,
+        List<MergeRowIssue> issues)
     {
         string text;
         try
@@ -93,13 +105,34 @@ public sealed class MergeOrchestrator(
             return;
         }
 
+        StatementParseResult result;
         try
         {
-            rows.AddRange(_statementParserRegistry.Parse(filePath, text));
+            result = _statementParserRegistry.Parse(filePath, text);
         }
         catch (Exception ex)
         {
             issues.Add(new MergeRowIssue(filePath, 0, null, ex.Message));
+            return;
+        }
+
+        // A parser reports lines it recognised but couldn't turn into a row (e.g. a
+        // transaction with no amount) alongside the rows it did read.
+        issues.AddRange(result.Issues);
+
+        // Only PDF rows are classified: they arrive with no ids at all, whereas an
+        // xlsx row already carries the Category/Group the user chose and keeps it.
+        foreach (var row in result.Rows)
+        {
+            var classification = classifier.Classify(row.Description);
+            if (classification is null)
+            {
+                rows.Add(row);
+                continue;
+            }
+
+            var classified = row with { CategoryId = classification.CategoryId, GroupId = classification.GroupId };
+            (classification.Kind == ExpenseKind.NonExpense ? nonExpenseRows : rows).Add(classified);
         }
     }
 
@@ -148,6 +181,7 @@ public sealed class MergeOrchestrator(
             .ToList();
 
         WriteExpensesSheet(workbook, plan, categoryRows.Count);
+        WriteNonExpenseSheet(workbook, plan);
         WriteCategoryReferenceSheet(workbook, categoryRows);
         WriteGroupReferenceSheet(workbook, plan.Groups);
 
@@ -208,6 +242,86 @@ public sealed class MergeOrchestrator(
         {
             sheet.Range(2, 9, lastRow, 9).CreateDataValidation()
                 .List($"='Group Reference Data'!$A$2:$A${plan.Groups.Count + 1}");
+        }
+    }
+
+    // Column order, header look, and widths follow the Non-Expense sheet of the reference
+    // workbook. Unlike "Expenses" this sheet is not meant for `import` (its id columns are
+    // headed "Category Id"/"Group Id" and the group is a plain name), so it is always
+    // written - header only if empty - to keep the workbook's shape predictable.
+    private static void WriteNonExpenseSheet(XLWorkbook workbook, MergePlan plan)
+    {
+        const string NonGroupName = "Non-group expenses";
+        var details = BatchId.TagPrefix.TrimEnd('_');
+        var headerColor = XLColor.FromHtml("#1B365D");
+        var bandColor = XLColor.FromHtml("#F7FAFC");
+        var borderColor = XLColor.FromHtml("#E2E8F0");
+
+        var sheet = workbook.Worksheets.Add("Non-Expense");
+        string[] headers =
+        [
+            "Cost", "Description", "Details", "Date", "Currency Code",
+            "Category Id", "Group Id", "Split Equally", "Group",
+        ];
+        for (var i = 0; i < headers.Length; i++)
+        {
+            sheet.Cell(1, i + 1).Value = headers[i];
+        }
+
+        var headerRange = sheet.Range(1, 1, 1, headers.Length);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Fill.BackgroundColor = headerColor;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        headerRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+        var r = 2;
+        foreach (var row in plan.NonExpenseRows)
+        {
+            sheet.Cell(r, 1).Value = row.Cost;
+            sheet.Cell(r, 2).Value = row.Description;
+            sheet.Cell(r, 3).Value = details;
+            sheet.Cell(r, 4).Value = row.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            sheet.Cell(r, 5).Value = plan.DefaultCurrency;
+            if (row.CategoryId is { } categoryId)
+            {
+                sheet.Cell(r, 6).Value = categoryId;
+            }
+
+            sheet.Cell(r, 7).Value = row.GroupId ?? ExpenseClassifier.NonGroupId;
+            sheet.Cell(r, 8).Value = "true";
+            sheet.Cell(r, 9).Value = NonGroupName;
+            r++;
+        }
+
+        if (plan.NonExpenseRows.Count > 0)
+        {
+            var lastRow = plan.NonExpenseRows.Count + 1;
+            var data = sheet.Range(2, 1, lastRow, headers.Length);
+            data.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            data.Style.Border.OutsideBorderColor = borderColor;
+            data.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+            data.Style.Border.InsideBorderColor = borderColor;
+            data.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            data.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+            // Description and Details read left-aligned; Cost is a right-aligned amount.
+            sheet.Range(2, 2, lastRow, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            var cost = sheet.Range(2, 1, lastRow, 1);
+            cost.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            cost.Style.NumberFormat.Format = "\\$#,##0.00";
+
+            // Light banding on every other data row, starting with the first.
+            for (var band = 2; band <= lastRow; band += 2)
+            {
+                sheet.Range(band, 1, band, headers.Length).Style.Fill.BackgroundColor = bandColor;
+            }
+        }
+
+        double[] widths = [11, 49.57, 13.71, 10.43, 14, 11, 19.14, 11.86, 19.71];
+        for (var i = 0; i < widths.Length; i++)
+        {
+            sheet.Column(i + 1).Width = widths[i];
         }
     }
 

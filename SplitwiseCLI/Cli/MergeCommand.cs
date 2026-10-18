@@ -43,7 +43,7 @@ public sealed class MergeCommand(SplitwiseClientFactory clientFactory) : AsyncCo
         {
             var outputDirectory = MergeOrchestrator.DetermineDefaultOutputDirectory(files);
             Directory.CreateDirectory(outputDirectory);
-            outputPath = Path.GetFullPath(Path.Combine(outputDirectory, MergeOrchestrator.BuildDefaultOutputFileName(plan.Rows)));
+            outputPath = Path.GetFullPath(Path.Combine(outputDirectory, MergeOrchestrator.BuildDefaultOutputFileName(plan.AllRows)));
         }
 
         orchestrator.Write(plan, outputPath);
