@@ -130,7 +130,7 @@ public class MergeOrchestratorTests : IDisposable
 
         using var workbook = new XLWorkbook(outputPath);
         var sheetNames = workbook.Worksheets.Select(w => w.Name).ToList();
-        Assert.Equal(["Expenses", "Category Reference Data", "Group Reference Data"], sheetNames);
+        Assert.Equal(["Expenses", "Non-Expense", "Category Reference Data", "Group Reference Data"], sheetNames);
 
         var expenses = workbook.Worksheet("Expenses");
         Assert.Equal("Details", expenses.Cell(1, 10).GetString());
@@ -298,12 +298,214 @@ public class MergeOrchestratorTests : IDisposable
         Assert.True(expenses.Cell(2, 9).IsEmpty());
     }
 
+    // Account shaped like the reference workbook's, so the built-in rules resolve to real ids.
+    private static FakeSplitwiseClient ClientWithReferenceAccount() => new(
+        [
+            new() { Id = 3, Name = "Food and drink", Subcategories = [new Subcategory { Id = 12, Name = "Groceries" }, new Subcategory { Id = 13, Name = "Dining out" }] },
+        ],
+        [
+            new() { Id = 0, Name = "Non-group expenses", Members = [] },
+            new() { Id = 51170136, Name = "🛒 Groceries + Shopping", Members = [new GroupMember { Id = 1 }, new GroupMember { Id = 2 }] },
+        ]);
+
+    private const string ClassifiablePdfText = """
+        Processed Date  Transaction Date  Details                              Amount
+        01/05/26        01/05/26          Coles 0608 Greenvale Vic              $45.67 Dr
+        02/05/26        02/05/26          Google Microsoft 365 Barangaroo Aus   $16.00 Dr
+        03/05/26        03/05/26          Some Merchant The Rules Never Saw     $9.99 Dr
+        """;
+
+    [Fact]
+    public async Task PrepareAsync_PreAssignsCategoryAndGroup_ForPdfRowsMatchingARule()
+    {
+        var plan = await CreateOrchestrator(ClientWithReferenceAccount(), new FakeTextExtractor(ClassifiablePdfText))
+            .PrepareAsync(["statement.pdf"]);
+
+        var coles = Assert.Single(plan.Rows, r => r.Description.StartsWith("Coles"));
+        Assert.Equal(12, coles.CategoryId);
+        Assert.Equal(51170136, coles.GroupId);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_MovesNonExpensePdfRows_ToNonExpenseRows_WithDiningOutAndGroupZero()
+    {
+        var plan = await CreateOrchestrator(ClientWithReferenceAccount(), new FakeTextExtractor(ClassifiablePdfText))
+            .PrepareAsync(["statement.pdf"]);
+
+        var google = Assert.Single(plan.NonExpenseRows);
+        Assert.Equal("Google Microsoft 365 Barangaroo Aus", google.Description);
+        Assert.Equal(16.00m, google.Cost);
+        Assert.Equal(13, google.CategoryId);
+        Assert.Equal(0, google.GroupId);
+        Assert.DoesNotContain(plan.Rows, r => r.Description.StartsWith("Google"));
+    }
+
+    [Fact]
+    public async Task PrepareAsync_LeavesUnmatchedPdfRowsBlank_InExpenses()
+    {
+        var plan = await CreateOrchestrator(ClientWithReferenceAccount(), new FakeTextExtractor(ClassifiablePdfText))
+            .PrepareAsync(["statement.pdf"]);
+
+        var unknown = Assert.Single(plan.Rows, r => r.Description.StartsWith("Some Merchant"));
+        Assert.Null(unknown.CategoryId);
+        Assert.Null(unknown.GroupId);
+        Assert.Equal(2, plan.Rows.Count);
+        Assert.Empty(plan.Issues);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_KeepsRowsInSourceOrder_WithinEachSheet()
+    {
+        const string text = """
+            Processed Date  Transaction Date  Details                              Amount
+            03/05/26        03/05/26          Google Youtube Bara                   $16.99 Dr
+            01/05/26        01/05/26          Telstra Services                      $129.52 Dr
+            02/05/26        02/05/26          Coles 0608 Greenvale Vic              $45.67 Dr
+            """;
+
+        var plan = await CreateOrchestrator(ClientWithReferenceAccount(), new FakeTextExtractor(text))
+            .PrepareAsync(["statement.pdf"]);
+
+        Assert.Equal(["Google Youtube Bara", "Telstra Services"], plan.NonExpenseRows.Select(r => r.Description));
+    }
+
+    [Fact]
+    public async Task PrepareAsync_DoesNotReclassifyXlsxRows_TheyKeepTheirOwnCategoryAndGroup()
+    {
+        // "Google" would be non-expense for a PDF row, but an xlsx row already carries
+        // the Category/Group the user chose, and must come through untouched.
+        var file = WriteWorkbook(("Google Microsoft 365", "16.00", "2026-05-01", "101", "55", null));
+
+        var plan = await CreateOrchestrator(ClientWithReferenceAccount()).PrepareAsync([file]);
+
+        var row = Assert.Single(plan.Rows);
+        Assert.Equal(101, row.CategoryId);
+        Assert.Equal(55, row.GroupId);
+        Assert.Empty(plan.NonExpenseRows);
+    }
+
+    [Fact]
+    public void MergePlan_AllRows_ListsExpenseRowsThenNonExpenseRows()
+    {
+        var expense = new MergedExpenseRow("a.pdf", "Coles", 1m, new DateTime(2026, 5, 1), 12, 1, null);
+        var nonExpense = new MergedExpenseRow("a.pdf", "Google", 2m, new DateTime(2026, 5, 2), 13, 0, null);
+
+        var plan = new MergePlan([expense], [], [], [], "AUD") { NonExpenseRows = [nonExpense] };
+
+        Assert.Equal([expense, nonExpense], plan.AllRows);
+    }
+
+    [Fact]
+    public void Write_ProducesNonExpenseSheet_InTheReferenceColumnOrderAndFormat()
+    {
+        var plan = new MergePlan([], [], [], [], "AUD")
+        {
+            NonExpenseRows =
+            [
+                new MergedExpenseRow("a.pdf", "Google Microsoft 365 Barangaroo Aus", 16m, new DateTime(2026, 7, 15), 13, 0, null),
+                new MergedExpenseRow("a.pdf", "Merry Rose Seastre D 2181859225 Asawa", 1874m, new DateTime(2026, 7, 16), 13, 0, null),
+            ],
+        };
+
+        var outputPath = Path.Combine(_root, "merged-nonexpense.xlsx");
+        CreateOrchestrator(new FakeSplitwiseClient()).Write(plan, outputPath);
+
+        using var workbook = new XLWorkbook(outputPath);
+        var sheet = workbook.Worksheet("Non-Expense");
+
+        string[] expectedHeaders =
+            ["Cost", "Description", "Details", "Date", "Currency Code", "Category Id", "Group Id", "Split Equally", "Group"];
+        Assert.Equal(expectedHeaders, Enumerable.Range(1, 9).Select(c => sheet.Cell(1, c).GetString()));
+
+        Assert.Equal(16.00, sheet.Cell(2, 1).GetDouble());
+        Assert.Equal("Google Microsoft 365 Barangaroo Aus", sheet.Cell(2, 2).GetString());
+        Assert.Equal("SPLITWISE_CLI", sheet.Cell(2, 3).GetString());
+        Assert.Equal("2026-07-15", sheet.Cell(2, 4).GetString());
+        Assert.Equal("AUD", sheet.Cell(2, 5).GetString());
+        Assert.Equal(13, sheet.Cell(2, 6).GetValue<long>());
+        Assert.Equal(0, sheet.Cell(2, 7).GetValue<long>());
+        Assert.Equal("true", sheet.Cell(2, 8).GetString());
+        Assert.Equal("Non-group expenses", sheet.Cell(2, 9).GetString());
+        Assert.Equal(1874.00, sheet.Cell(3, 1).GetDouble());
+        Assert.Equal("Merry Rose Seastre D 2181859225 Asawa", sheet.Cell(3, 2).GetString());
+    }
+
+    [Fact]
+    public void Write_StylesNonExpenseSheet_WithTheReferenceHeaderBandingAndWidths()
+    {
+        var plan = new MergePlan([], [], [], [], "AUD")
+        {
+            NonExpenseRows =
+            [
+                new MergedExpenseRow("a.pdf", "One", 1m, new DateTime(2026, 7, 1), 13, 0, null),
+                new MergedExpenseRow("a.pdf", "Two", 2m, new DateTime(2026, 7, 2), 13, 0, null),
+            ],
+        };
+
+        var outputPath = Path.Combine(_root, "merged-nonexpense-style.xlsx");
+        CreateOrchestrator(new FakeSplitwiseClient()).Write(plan, outputPath);
+
+        using var workbook = new XLWorkbook(outputPath);
+        var sheet = workbook.Worksheet("Non-Expense");
+
+        var header = sheet.Cell(1, 1).Style;
+        Assert.True(header.Font.Bold);
+        Assert.Equal(XLColor.White, header.Font.FontColor);
+        Assert.Equal(XLColor.FromHtml("#1B365D"), header.Fill.BackgroundColor);
+        Assert.Equal(XLAlignmentHorizontalValues.Center, header.Alignment.Horizontal);
+
+        Assert.Equal("\\$#,##0.00", sheet.Cell(2, 1).Style.NumberFormat.Format);
+        Assert.Equal(XLAlignmentHorizontalValues.Left, sheet.Cell(2, 2).Style.Alignment.Horizontal);
+        Assert.Equal(XLAlignmentHorizontalValues.Center, sheet.Cell(2, 5).Style.Alignment.Horizontal);
+
+        // Every other data row is banded, starting with the first.
+        Assert.Equal(XLColor.FromHtml("#F7FAFC"), sheet.Cell(2, 2).Style.Fill.BackgroundColor);
+        Assert.NotEqual(XLColor.FromHtml("#F7FAFC"), sheet.Cell(3, 2).Style.Fill.BackgroundColor);
+        Assert.Equal(XLBorderStyleValues.Thin, sheet.Cell(2, 2).Style.Border.BottomBorder);
+
+        Assert.Equal(49.57, sheet.Column(2).Width, 2);
+        Assert.Equal(19.71, sheet.Column(9).Width, 2);
+    }
+
+    [Fact]
+    public void Write_AlwaysWritesNonExpenseSheet_HeaderOnlyWhenThereAreNoNonExpenseRows()
+    {
+        var plan = new MergePlan([], [], [], [], "AUD");
+
+        var outputPath = Path.Combine(_root, "merged-no-nonexpense.xlsx");
+        CreateOrchestrator(new FakeSplitwiseClient()).Write(plan, outputPath);
+
+        using var workbook = new XLWorkbook(outputPath);
+        var sheet = workbook.Worksheet("Non-Expense");
+        Assert.Equal("Cost", sheet.Cell(1, 1).GetString());
+        Assert.Equal("Group", sheet.Cell(1, 9).GetString());
+        Assert.True(sheet.Cell(2, 1).IsEmpty());
+    }
+
+    [Fact]
+    public void Write_DoesNotAddNonExpenseRows_ToTheExpensesSheet()
+    {
+        var plan = new MergePlan(
+            [new MergedExpenseRow("a.pdf", "Coles", 10m, new DateTime(2026, 5, 1), 12, 1, null)], [], [], [], "AUD")
+        {
+            NonExpenseRows = [new MergedExpenseRow("a.pdf", "Google", 2m, new DateTime(2026, 5, 2), 13, 0, null)],
+        };
+
+        var outputPath = Path.Combine(_root, "merged-separate.xlsx");
+        CreateOrchestrator(new FakeSplitwiseClient()).Write(plan, outputPath);
+
+        using var workbook = new XLWorkbook(outputPath);
+        var expenses = workbook.Worksheet("Expenses");
+        Assert.Equal("Coles", expenses.Cell(2, 2).GetString());
+        Assert.True(expenses.Cell(3, 2).IsEmpty());
+    }
+
     private sealed class FakeTextExtractor(string text) : IPdfTextExtractor
     {
         public string ExtractText(string filePath) => text;
     }
 
-    private sealed class FakeSplitwiseClient : ISplitwiseClient
+    private sealed class FakeSplitwiseClient(List<Category>? categories = null, List<Group>? groups = null) : ISplitwiseClient
     {
         public bool CreateOrDeleteCalled { get; private set; }
 
@@ -311,13 +513,13 @@ public class MergeOrchestratorTests : IDisposable
             Task.FromResult(new User { Id = 1, DefaultCurrency = "USD" });
 
         public Task<List<Category>> GetCategoriesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new List<Category>
+            Task.FromResult(categories ?? new List<Category>
             {
                 new() { Id = 1, Name = "Food", Subcategories = [new Subcategory { Id = 101, Name = "Groceries" }] },
             });
 
         public Task<List<Group>> GetGroupsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new List<Group>
+            Task.FromResult(groups ?? new List<Group>
             {
                 new() { Id = 0, Name = "Non-group expenses", Members = [] },
                 new() { Id = 55, Name = "Roommates", Members = [new GroupMember { Id = 1 }, new GroupMember { Id = 2 }] },
